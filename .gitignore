@@ -1,3 +1,8 @@
 # A prompt file for writing long prompts in terminal
 
 PROMPT.md
+.next/
+node_modules/
+.env*
+!.env.example
+tsconfig.tsbuildinfo
