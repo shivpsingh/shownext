@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="shownext_blue">#3267E8</color>
+    <color name="shownext_coral">#FF725E</color>
+    <color name="shownext_ink">#172235</color>
+    <color name="shownext_mint">#D7F0E4</color>
+    <color name="shownext_paper">#F4F7FB</color>
+    <string name="accessibility_service_description">ShowNext reads visible controls so it can highlight the next step.</string>
+    <string name="app_name">ShowNext</string>
+    <string name="open_accessibility_settings">Open Accessibility Settings</string>
+    <string name="pause_assistant">Pause assistant</string>
+    <string name="paused_message">The helper is paused. Resume it when you want help again.</string>
+    <string name="resume_assistant">Resume assistant</string>
+    <string name="service_disabled">ShowNext is not enabled yet</string>
+    <string name="service_enabled">ShowNext is ready</string>
+    <string name="setup_body">ShowNext needs Accessibility access to see the controls on the screen and point out the next step. It does not save or send your screen.</string>
+    <string name="setup_title">A little help, right on the screen</string>
+    <style name="Theme.ShowNext" parent="Theme.Material3.DayNight.NoActionBar"><item name="android:fontFamily">sans</item><item name="android:colorAccent">@color/shownext_blue</item><item name="android:navigationBarColor">@color/shownext_paper</item><item name="android:statusBarColor">@color/shownext_paper</item><item name="android:windowLightStatusBar">true</item></style>
+</resources>
