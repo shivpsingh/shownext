@@ -72,31 +72,3 @@ export async function prepareImages(imageBuffer: Buffer): Promise<{ clean: Buffe
   return { clean, gridded };
 }
 
-export function cellToBox(
-  cell: string,
-): { x: number; y: number; width: number; height: number } | null {
-  if (!cell || cell.length < 2 || cell.length > 3) return null;
-
-  const rowChar = cell[0].toUpperCase();
-  const colStr = cell.slice(1);
-  const rowIndex = ROW_LETTERS.indexOf(rowChar);
-  const colNum = Number.parseInt(colStr, 10);
-
-  if (rowIndex < 0 || rowIndex >= GRID_ROWS) return null;
-  if (!Number.isFinite(colNum) || colNum < 1 || colNum > GRID_COLS) return null;
-
-  const colIndex = colNum - 1;
-  const cellW = 1 / GRID_COLS;
-  const cellH = 1 / GRID_ROWS;
-  const shrink = 0.6;
-  const ringW = cellW * shrink;
-  const ringH = cellH * shrink;
-  const centerX = colIndex * cellW + cellW / 2;
-  const centerY = rowIndex * cellH + cellH / 2;
-  return {
-    x: centerX - ringW / 2,
-    y: centerY - ringH / 2,
-    width: ringW,
-    height: ringH,
-  };
-}
