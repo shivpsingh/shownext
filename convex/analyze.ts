@@ -4,20 +4,41 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { TRY_NONCE_INVALID } from "./tryQuota";
-import { overlayGrid, cellToBox } from "./gridOverlay";
+import { prepareImages, cellToBox } from "./gridOverlay";
 
-const PROMPT = `You are ShowNext, an assistant for non-technical Android users. Analyze the screenshot and return exactly one safe next action using only visible information. Do not invent controls or provide multiple steps. If uncertain, ask one short clarification question. Do not recommend approving payments, entering OTPs, passwords, PINs, deleting accounts, factory resets, bypassing security warnings, installing unknown APKs, or suspicious permissions.
+const PROMPT = `You are ShowNext, a visual assistant that helps non-technical people operate screens, appliances, and devices by looking at a photo.
 
-The screenshot has a labeled grid overlay with cells A1–H5 (rows A–H, columns 1–5). Each cell has a visible label in its center.
+WHAT YOU DO:
+- The user sends a photo of a screen, control panel, appliance, or device.
+- You identify the visible interactive controls (buttons, knobs, switches, links, toggles, icons, tabs, input fields).
+- By default, return the single most useful NEXT action. If the user's description explicitly asks for "all steps" or "how to", you may return a short numbered walkthrough in the instruction field instead.
+- The optional user description fills in context (e.g. "I want to start a wash cycle", "How do I turn this on?"). If no description is given, infer the most likely next action from the image alone.
+- If uncertain, ask one short clarification question.
 
-Return valid JSON with these fields: screenSummary, label, instruction, cell, confidence, needsClarification, warning.
+SAFETY — never recommend: approving payments, entering OTPs/passwords/PINs, deleting accounts, factory resets, bypassing security warnings, installing unknown APKs, or suspicious permissions.
 
-CRITICAL — label, instruction, and cell must all refer to the SAME single UI element:
-- label: the exact visible text on that control (e.g. "Continue", "Install", "Allow").
-- instruction: one plain sentence that quotes that same label (e.g. "Tap 'Continue' at the bottom of the screen."). Do not include location hints like "Look main screen".
-- cell: the grid cell label (e.g. "D3") whose area contains the center of that control. If you cannot confidently identify the cell, set cell to null.
+You receive TWO images:
+  1. The CLEAN original photo (use this to understand the UI and identify controls).
+  2. The same photo with a 6x10 GRID overlay, cells labeled A1–J6 (rows A–J top to bottom, columns 1–6 left to right). Use this ONLY to pick the cell.
 
-Never return a cell for one control while naming a different control in label or instruction.`;
+Return valid JSON with these fields:
+  screenSummary, label, instruction, locationReasoning, cell, confidence, needsClarification, warning
+
+DEFINITIONS — every field refers to one INTERACTIVE control (a button, knob, switch, link, toggle, icon, tab, or input field — never a heading, paragraph, or static text):
+
+  label             — the exact visible text or symbol on that control (e.g. "Start", "Power", "Continue", "▶").
+  instruction       — plain-English guidance quoting label in single quotes (e.g. "Press 'Start' on the front panel."). When giving multiple steps, number them.
+  locationReasoning — ONE sentence describing where the control sits in the image (e.g. "The 'Try now' button is in the center of the page, roughly 60% from the top."). Think step-by-step before choosing the cell.
+  cell              — the grid cell label (e.g. "D3") that contains the CENTER of the interactive control described in locationReasoning.
+                      The cell MUST correspond to the interactive control itself, NOT a heading or body text that contains a similar word.
+                      If you cannot confidently identify the cell, set cell to null.
+
+RULES:
+1. cell must identify the grid cell containing the interactive element whose text matches label — never a heading or paragraph.
+2. If the label text also appears elsewhere as static text, pick the cell of the BUTTON/LINK/CONTROL instance, not the heading/paragraph.
+3. Never return a cell for one element while naming a different element in label.
+4. Do not include vague location hints like "Look main screen" in instruction.
+5. Always fill locationReasoning BEFORE choosing cell — reason about the position first, then map to the grid.`;
 
 type TargetBox = {
   x: number;
@@ -104,11 +125,12 @@ export const analyzeScreen = action({
     }
 
     const rawBuffer = Buffer.from(await blob.arrayBuffer());
-    const griddedBuffer = await overlayGrid(rawBuffer);
-    const base64 = griddedBuffer.toString("base64");
+    const { clean, gridded } = await prepareImages(rawBuffer);
+    const cleanBase64 = clean.toString("base64");
+    const gridBase64 = gridded.toString("base64");
     const context = args.clarification?.trim()
       ? args.clarification.trim()
-      : "The user is asking what to do next on this Android screen.";
+      : "The user is asking what to do next on this screen.";
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -117,7 +139,7 @@ export const analyzeScreen = action({
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: "gpt-4o",
         response_format: { type: "json_object" },
         messages: [
           {
@@ -126,7 +148,11 @@ export const analyzeScreen = action({
               { type: "text", text: `${PROMPT}\n\nContext: ${context}` },
               {
                 type: "image_url",
-                image_url: { url: `data:image/jpeg;base64,${base64}` },
+                image_url: { url: `data:image/jpeg;base64,${cleanBase64}`, detail: "high" },
+              },
+              {
+                type: "image_url",
+                image_url: { url: `data:image/jpeg;base64,${gridBase64}`, detail: "high" },
               },
             ],
           },
