@@ -1,6 +1,6 @@
 "use client";
 
-import { useAction, useMutation } from "convex/react";
+import { useAction } from "convex/react";
 import { useCallback } from "react";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
@@ -8,33 +8,24 @@ import { getConvexSiteUrl } from "./convexSite";
 import { TRY_LIMIT_REACHED } from "./useWebTryQuota";
 import { MAX_CLARIFICATION_ROUNDS, type ScreenAnalysis } from "../lib/webTry";
 
-async function consumeTryFromSite(): Promise<string> {
+async function fetchSiteEndpoint<T>(path: string, method = "POST"): Promise<T> {
   const siteUrl = getConvexSiteUrl();
-  if (!siteUrl) {
-    throw new Error("Convex is not configured.");
-  }
-
-  const response = await fetch(`${siteUrl}/web-try/consume`, { method: "POST" });
-  if (response.status === 429) {
-    const body = (await response.json()) as { error?: string };
+  if (!siteUrl) throw new Error("Convex is not configured.");
+  const res = await fetch(`${siteUrl}${path}`, { method });
+  if (res.status === 429) {
+    const body = (await res.json()) as { error?: string };
     throw new Error(body.error ?? TRY_LIMIT_REACHED);
   }
-
-  if (!response.ok) {
-    throw new Error("Could not consume try.");
-  }
-
-  const data = (await response.json()) as { nonce: string };
-  return data.nonce;
+  if (!res.ok) throw new Error(`Request to ${path} failed.`);
+  return (await res.json()) as T;
 }
 
 export function useAnalyzeScreen() {
-  const generateUploadUrl = useMutation(api.uploads.generateUploadUrl);
   const analyzeScreen = useAction(api.analyze.analyzeScreen);
 
   const uploadAndAnalyze = useCallback(
     async (blob: Blob, context?: string) => {
-      const uploadUrl = await generateUploadUrl();
+      const { uploadUrl } = await fetchSiteEndpoint<{ uploadUrl: string }>("/web-try/upload-url");
       const uploadResponse = await fetch(uploadUrl, {
         method: "POST",
         headers: { "Content-Type": blob.type || "image/jpeg" },
@@ -50,7 +41,7 @@ export function useAnalyzeScreen() {
         throw new Error("Upload did not return a storage id.");
       }
 
-      const nonce = await consumeTryFromSite();
+      const { nonce } = await fetchSiteEndpoint<{ nonce: string }>("/web-try/consume");
       const trimmedContext = context?.trim();
       const analysis = (await analyzeScreen({
         storageId: payload.storageId,
@@ -59,7 +50,7 @@ export function useAnalyzeScreen() {
       })) as ScreenAnalysis;
       return { analysis, storageId: payload.storageId };
     },
-    [analyzeScreen, generateUploadUrl],
+    [analyzeScreen],
   );
 
   const analyzeExisting = useCallback(
