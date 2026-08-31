@@ -10,10 +10,17 @@ export type WebTryPhase =
   | "clarification"
   | "error";
 
+export type TargetBox = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export type ScreenAnalysis = {
   screenSummary: string;
   nextStep: string;
-  location?: string;
+  targetBox: TargetBox | null;
   confidence: number;
   needsClarification: boolean;
   warning?: string;

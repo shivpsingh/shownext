@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Id } from "../convex/_generated/dataModel";
 import { useAnalyzeScreen } from "../lib/useAnalyzeScreen";
 import type { DemoMode, ScreenAnalysis, WebTryPhase } from "../lib/webTry";
-import { LogoMark } from "./LogoMark";
 import { PhoneDemo } from "./PhoneDemo";
 import { WebTryExperience } from "./WebTryExperience";
 
@@ -57,24 +56,21 @@ function HeroSectionView({
           animate={{ opacity: showFullPage ? 0 : webTryActive ? 0.45 : 1 }}
           transition={{ duration: 0.35 }}
         >
-          <motion.div
-            className="hero-brand"
+          <motion.h1
+            className="hero-headline"
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: webTryActive ? 0 : 1, y: 0 }}
             transition={{ duration: 0.35, ease: fadeEase }}
           >
-            <span className="hero-brand__logo">
-              <LogoMark className="wordmark-mark" size={44} />
-            </span>
-            <span className="hero-brand__name">ShowNext</span>
-          </motion.div>
+            When your parent gets stuck on Android, ShowNext points to the one button they should tap.
+          </motion.h1>
           <motion.p
             className="hero-tagline"
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: webTryActive ? 0 : 1, y: 0 }}
             transition={{ duration: 0.35, ease: fadeEase, delay: webTryActive ? 0 : 0.1 }}
           >
-            A calm guide on their screen — one clear next tap when they&apos;re stuck, and you&apos;re not there to help.
+            Less explaining. More doing.
           </motion.p>
           {!webTryActive && (
             <motion.button
