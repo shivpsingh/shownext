@@ -4,6 +4,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Id } from "../convex/_generated/dataModel";
 import { useAnalyzeScreen } from "../lib/useAnalyzeScreen";
+import { scrollToWaitlist } from "../lib/scrollToWaitlist";
+import { TRY_LIMIT_REACHED, useWebTryQuota } from "../lib/useWebTryQuota";
 import type { DemoMode, ScreenAnalysis, WebTryPhase } from "../lib/webTry";
 import { PhoneDemo } from "./PhoneDemo";
 import { WebTryExperience } from "./WebTryExperience";
@@ -26,6 +28,10 @@ type HeroSectionViewProps = {
   onPhotoReady: (blob: Blob) => void;
   onRetake: () => void;
   onAnalyze: () => void;
+  tryRemaining?: number;
+  tryLimit?: number;
+  limitExhausted?: boolean;
+  onJoinWaitlist?: () => void;
 };
 
 function HeroSectionView({
@@ -44,9 +50,15 @@ function HeroSectionView({
   onPhotoReady,
   onRetake,
   onAnalyze,
+  tryRemaining,
+  tryLimit,
+  limitExhausted,
+  onJoinWaitlist,
 }: HeroSectionViewProps) {
   const webTryActive = demoMode === "webTry";
   const showFullPage = webTryActive && webTryPhase !== "idle";
+  const atTryLimit = tryRemaining === 0;
+  const ctaLabel = atTryLimit ? "Join the waitlist" : "Try now";
 
   return (
     <section className={`hero-stage ${webTryActive ? "hero-stage--web-try" : ""}`} id="top">
@@ -73,16 +85,28 @@ function HeroSectionView({
             When they get stuck on their phone and you are not there.
           </motion.p>
           {!webTryActive && (
-            <motion.button
-              className="hero-cta"
-              type="button"
-              onClick={onStartWebTry}
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, ease: fadeEase, delay: 0.18 }}
-            >
-              Try now
-            </motion.button>
+            <>
+              <motion.button
+                className="hero-cta"
+                type="button"
+                onClick={onStartWebTry}
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.55, ease: fadeEase, delay: 0.18 }}
+              >
+                {ctaLabel}
+              </motion.button>
+              {tryRemaining !== undefined && tryLimit !== undefined && tryRemaining > 0 ? (
+                <motion.p
+                  className="hero-note hero-try-quota"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.35, delay: 0.24 }}
+                >
+                  {tryRemaining} of {tryLimit} free tries left
+                </motion.p>
+              ) : null}
+            </>
           )}
         </motion.div>
 
@@ -105,6 +129,7 @@ function HeroSectionView({
             errorMessage={errorMessage}
             clarificationInput={clarificationInput}
             userContext={userContext}
+            limitExhausted={limitExhausted}
             onClose={onExitWebTry}
             onPhotoReady={onPhotoReady}
             onRetake={onRetake}
@@ -112,6 +137,7 @@ function HeroSectionView({
             onClarificationInputChange={onClarificationInputChange}
             onUserContextChange={onUserContextChange}
             onClarificationSubmit={onClarificationSubmit}
+            onJoinWaitlist={onJoinWaitlist}
           />
         )}
       </AnimatePresence>
@@ -248,12 +274,34 @@ function HeroSectionLocal() {
 function HeroSectionConnected() {
   const session = useWebTrySession();
   const { uploadAndAnalyze, analyzeExisting, maxClarificationRounds } = useAnalyzeScreen();
+  const { remaining, limit, refresh } = useWebTryQuota();
+  const [limitExhausted, setLimitExhausted] = useState(false);
+
+  const handleJoinWaitlist = useCallback(() => {
+    session.resetWebTry();
+    scrollToWaitlist();
+  }, [session]);
+
+  const handleStartWebTry = useCallback(async () => {
+    try {
+      const quota = await refresh();
+      if (quota.remaining <= 0) {
+        scrollToWaitlist();
+        return;
+      }
+    } catch {
+      // If quota check fails, still allow trying — analyze will enforce server-side.
+    }
+    setLimitExhausted(false);
+    session.startWebTry();
+  }, [refresh, session]);
 
   const handleAnalyze = async () => {
     if (!session.previewBlob) return;
 
     session.setWebTryPhase("uploading");
     session.setErrorMessage(null);
+    setLimitExhausted(false);
 
     try {
       session.setWebTryPhase("analyzing");
@@ -264,9 +312,17 @@ function HeroSectionConnected() {
       session.setStorageId(result.storageId);
       session.setAnalysis(result.analysis);
       session.setWebTryPhase(result.analysis.needsClarification ? "clarification" : "result");
+      void refresh();
     } catch (error) {
-      session.setErrorMessage(error instanceof Error ? error.message : "Analysis failed.");
+      const message = error instanceof Error ? error.message : "Analysis failed.";
+      if (message === TRY_LIMIT_REACHED) {
+        setLimitExhausted(true);
+        session.setErrorMessage("You've used your free tries for now.");
+      } else {
+        session.setErrorMessage(message);
+      }
       session.setWebTryPhase("error");
+      void refresh();
     }
   };
 
@@ -303,11 +359,15 @@ function HeroSectionConnected() {
       onClarificationInputChange={session.setClarificationInput}
       onUserContextChange={session.setUserContext}
       onClarificationSubmit={() => void handleClarificationSubmit()}
-      onStartWebTry={session.startWebTry}
+      onStartWebTry={() => void handleStartWebTry()}
       onExitWebTry={session.resetWebTry}
       onPhotoReady={session.handlePhotoReady}
       onRetake={session.handleRetake}
       onAnalyze={() => void handleAnalyze()}
+      tryRemaining={remaining}
+      tryLimit={limit}
+      limitExhausted={limitExhausted}
+      onJoinWaitlist={handleJoinWaitlist}
     />
   );
 }
