@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { resolveTargetRing, type ScreenAnalysis, type WebTryPhase } from "../lib/webTry";
 import { LogoMark } from "./LogoMark";
+import { AIActionCard } from "./AIActionCard";
 
 type WebTryExperienceProps = {
   phase: WebTryPhase;
@@ -397,8 +398,9 @@ export function WebTryExperience({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
           >
-            {analysis.warning ? <p className="web-try-page__warning">{analysis.warning}</p> : null}
-            <p className="web-try-result-instruction">{analysis.instruction}</p>
+            <div className="web-try-result__card-slot">
+              <AIActionCard analysis={analysis} />
+            </div>
             <ResultScreenshot previewUrl={previewUrl} analysis={analysis} />
           </motion.div>
         ) : splitView && previewUrl ? (
