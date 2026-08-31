@@ -2,56 +2,143 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 
 export const TRY_LIMIT_REACHED = "TRY_LIMIT_REACHED";
+export const DAILY_CAPACITY_REACHED = "DAILY_CAPACITY_REACHED";
+export const IP_RATE_LIMITED = "IP_RATE_LIMITED";
 export const TRY_NONCE_INVALID = "TRY_NONCE_INVALID";
 
+const BROWSER_LIMIT = 5;
+const MAX_ANALYSES_PER_DAY = 50;
+const IP_HOURLY_LIMIT = 20;
+const IP_WINDOW_MS = 60 * 60 * 1000;
 const NONCE_TTL_MS = 5 * 60 * 1000;
 
-export function getTryLimit(): number {
-  const raw = process.env.WEB_TRY_LIMIT;
-  if (!raw) return 2;
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed < 0) return 2;
-  return parsed;
+function todayKey(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
-export const getQuotaForIp = internalQuery({
-  args: { ipHash: v.string() },
+// ── Queries ──────────────────────────────────────────────
+
+export const getQuota = internalQuery({
+  args: { browserId: v.string() },
   handler: async (ctx, args) => {
-    const limit = getTryLimit();
-    const row = await ctx.db
-      .query("tryQuota")
-      .withIndex("by_ipHash", (q) => q.eq("ipHash", args.ipHash))
+    const dateKey = todayKey();
+    const dailyRow = await ctx.db
+      .query("dailyAnalytics")
+      .withIndex("by_dateKey", (q) => q.eq("dateKey", dateKey))
       .unique();
-    const used = row?.tryCount ?? 0;
+    const dailyUsed = dailyRow?.totalCount ?? 0;
+
+    if (dailyUsed >= MAX_ANALYSES_PER_DAY) {
+      return {
+        limit: BROWSER_LIMIT,
+        used: BROWSER_LIMIT,
+        remaining: 0,
+        reason: "daily_capacity" as const,
+      };
+    }
+
+    const browserRow = await ctx.db
+      .query("browserQuota")
+      .withIndex("by_browserId", (q) => q.eq("browserId", args.browserId))
+      .unique();
+    const used = browserRow?.tryCount ?? 0;
+    const remaining = Math.max(0, BROWSER_LIMIT - used);
+
     return {
-      limit,
+      limit: BROWSER_LIMIT,
       used,
-      remaining: Math.max(0, limit - used),
+      remaining,
+      reason: remaining === 0 ? ("browser_limit" as const) : (null as null),
     };
   },
 });
 
-export const consumeTryForIp = internalMutation({
-  args: { ipHash: v.string() },
-  handler: async (ctx, args) => {
-    const limit = getTryLimit();
-    const now = Date.now();
+export const getDailyCount = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const dateKey = todayKey();
     const row = await ctx.db
-      .query("tryQuota")
+      .query("dailyAnalytics")
+      .withIndex("by_dateKey", (q) => q.eq("dateKey", dateKey))
+      .unique();
+    return { count: row?.totalCount ?? 0, ceiling: MAX_ANALYSES_PER_DAY };
+  },
+});
+
+// ── Mutations ────────────────────────────────────────────
+
+export const consumeTry = internalMutation({
+  args: { browserId: v.string(), ipHash: v.string() },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const dateKey = todayKey();
+
+    // 1. Global daily ceiling
+    const dailyRow = await ctx.db
+      .query("dailyAnalytics")
+      .withIndex("by_dateKey", (q) => q.eq("dateKey", dateKey))
+      .unique();
+    const dailyUsed = dailyRow?.totalCount ?? 0;
+    if (dailyUsed >= MAX_ANALYSES_PER_DAY) {
+      throw new Error(DAILY_CAPACITY_REACHED);
+    }
+
+    // 2. IP hourly rate limit
+    const ipRow = await ctx.db
+      .query("ipRateLimit")
       .withIndex("by_ipHash", (q) => q.eq("ipHash", args.ipHash))
       .unique();
 
-    const used = row?.tryCount ?? 0;
-    if (used >= limit) {
+    if (ipRow) {
+      const windowExpired = now - ipRow.windowStart > IP_WINDOW_MS;
+      if (windowExpired) {
+        await ctx.db.patch(ipRow._id, { windowStart: now, requestCount: 1 });
+      } else {
+        if (ipRow.requestCount >= IP_HOURLY_LIMIT) {
+          throw new Error(IP_RATE_LIMITED);
+        }
+        await ctx.db.patch(ipRow._id, { requestCount: ipRow.requestCount + 1 });
+      }
+    } else {
+      await ctx.db.insert("ipRateLimit", {
+        ipHash: args.ipHash,
+        windowStart: now,
+        requestCount: 1,
+      });
+    }
+
+    // 3. Browser allowance
+    const browserRow = await ctx.db
+      .query("browserQuota")
+      .withIndex("by_browserId", (q) => q.eq("browserId", args.browserId))
+      .unique();
+    const browserUsed = browserRow?.tryCount ?? 0;
+    if (browserUsed >= BROWSER_LIMIT) {
       throw new Error(TRY_LIMIT_REACHED);
     }
 
-    if (row) {
-      await ctx.db.patch(row._id, { tryCount: used + 1, updatedAt: now });
+    // All checks passed — increment counters
+    if (browserRow) {
+      await ctx.db.patch(browserRow._id, { tryCount: browserUsed + 1, updatedAt: now });
     } else {
-      await ctx.db.insert("tryQuota", { ipHash: args.ipHash, tryCount: 1, updatedAt: now });
+      await ctx.db.insert("browserQuota", {
+        browserId: args.browserId,
+        tryCount: 1,
+        updatedAt: now,
+      });
     }
 
+    if (dailyRow) {
+      await ctx.db.patch(dailyRow._id, { totalCount: dailyUsed + 1, updatedAt: now });
+    } else {
+      await ctx.db.insert("dailyAnalytics", {
+        dateKey,
+        totalCount: 1,
+        updatedAt: now,
+      });
+    }
+
+    // Issue nonce
     const nonce = crypto.randomUUID();
     await ctx.db.insert("tryNonces", {
       nonce,
@@ -63,6 +150,8 @@ export const consumeTryForIp = internalMutation({
     return { nonce };
   },
 });
+
+// ── Nonce / session (unchanged) ──────────────────────────
 
 export const redeemNonce = internalMutation({
   args: {
@@ -104,5 +193,18 @@ export const isStorageAuthorized = internalQuery({
       .withIndex("by_storageId", (q) => q.eq("storageId", args.storageId))
       .unique();
     return session !== null;
+  },
+});
+
+// Legacy — kept for old tryQuota rows; not used for new flow
+export const getQuotaForIp = internalQuery({
+  args: { ipHash: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("tryQuota")
+      .withIndex("by_ipHash", (q) => q.eq("ipHash", args.ipHash))
+      .unique();
+    const used = row?.tryCount ?? 0;
+    return { limit: BROWSER_LIMIT, used, remaining: Math.max(0, BROWSER_LIMIT - used) };
   },
 });

@@ -465,10 +465,10 @@ export function WebTryExperience({
 
               {phase === "error" && (
                 <>
-                  <p className="web-try-page__eyebrow">{limitExhausted ? "Free tries used" : "Something went wrong"}</p>
+                  <p className="web-try-page__eyebrow">{limitExhausted ? "Demo limit reached" : "Something went wrong"}</p>
                   <h2>{limitExhausted ? "Join the waitlist for more" : "Could not analyze that screen"}</h2>
                   <p className="web-try-page__lede">
-                    {errorMessage ?? (limitExhausted ? "You've used your free tries for now." : "Try again with a clearer photo.")}
+                    {errorMessage ?? "Try again with a clearer photo."}
                   </p>
                   {limitExhausted ? (
                     <button className="hero-cta" type="button" onClick={onJoinWaitlist ?? onClose}>

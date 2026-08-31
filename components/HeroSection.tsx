@@ -5,7 +5,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Id } from "../convex/_generated/dataModel";
 import { useAnalyzeScreen } from "../lib/useAnalyzeScreen";
 import { scrollToWaitlist } from "../lib/scrollToWaitlist";
-import { TRY_LIMIT_REACHED, useWebTryQuota } from "../lib/useWebTryQuota";
+import {
+  TRY_LIMIT_REACHED,
+  DAILY_CAPACITY_REACHED,
+  IP_RATE_LIMITED,
+  useWebTryQuota,
+} from "../lib/useWebTryQuota";
 import type { DemoMode, ScreenAnalysis, WebTryPhase } from "../lib/webTry";
 import { PhoneDemo } from "./PhoneDemo";
 import { WebTryExperience } from "./WebTryExperience";
@@ -316,9 +321,21 @@ function HeroSectionConnected() {
       void refresh();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Analysis failed.";
-      if (message === TRY_LIMIT_REACHED) {
+      if (
+        message === TRY_LIMIT_REACHED ||
+        message === DAILY_CAPACITY_REACHED ||
+        message === IP_RATE_LIMITED
+      ) {
         setLimitExhausted(true);
-        session.setErrorMessage("You've used your free tries for now.");
+        if (message === DAILY_CAPACITY_REACHED) {
+          session.setErrorMessage(
+            "Demo is at capacity for today. Join the waitlist and I will send you access.",
+          );
+        } else {
+          session.setErrorMessage(
+            "You have used your free tries. Join the waitlist and I will send you access.",
+          );
+        }
       } else {
         session.setErrorMessage(message);
       }

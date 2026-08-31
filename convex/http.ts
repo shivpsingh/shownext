@@ -1,7 +1,11 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { TRY_LIMIT_REACHED } from "./tryQuota";
+import {
+  TRY_LIMIT_REACHED,
+  DAILY_CAPACITY_REACHED,
+  IP_RATE_LIMITED,
+} from "./tryQuota";
 
 const http = httpRouter();
 
@@ -49,66 +53,109 @@ function jsonResponse(request: Request, body: unknown, status = 200): Response {
   });
 }
 
-http.route({
-  path: "/web-try/quota",
-  method: "OPTIONS",
-  handler: httpAction(async (_ctx, request) => {
-    return new Response(null, { status: 204, headers: corsHeaders(request) });
-  }),
-});
+// ── OPTIONS preflight ────────────────────────────────────
+
+for (const path of ["/web-try/quota", "/web-try/consume", "/web-try/upload-url"]) {
+  http.route({
+    path,
+    method: "OPTIONS",
+    handler: httpAction(async (_ctx, request) => {
+      return new Response(null, { status: 204, headers: corsHeaders(request) });
+    }),
+  });
+}
+
+// ── GET /web-try/quota?browserId=xxx ─────────────────────
 
 http.route({
   path: "/web-try/quota",
   method: "GET",
   handler: httpAction(async (ctx, request) => {
-    const ipHash = await hashIp(getClientIp(request));
-    const quota = await ctx.runQuery(internal.tryQuota.getQuotaForIp, { ipHash });
+    const url = new URL(request.url);
+    const browserId = url.searchParams.get("browserId") ?? "";
+
+    if (!browserId) {
+      return jsonResponse(request, { limit: 5, used: 0, remaining: 5, reason: null });
+    }
+
+    const quota = await ctx.runQuery(internal.tryQuota.getQuota, { browserId });
     return jsonResponse(request, quota);
   }),
 });
 
-http.route({
-  path: "/web-try/consume",
-  method: "OPTIONS",
-  handler: httpAction(async (_ctx, request) => {
-    return new Response(null, { status: 204, headers: corsHeaders(request) });
-  }),
-});
+// ── POST /web-try/consume { browserId } ──────────────────
 
 http.route({
   path: "/web-try/consume",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     const ipHash = await hashIp(getClientIp(request));
+    let browserId = "";
+
     try {
-      const result = await ctx.runMutation(internal.tryQuota.consumeTryForIp, { ipHash });
+      const body = (await request.json()) as { browserId?: string };
+      browserId = body.browserId ?? "";
+    } catch {
+      // empty body is fine, browserId will be ""
+    }
+
+    if (!browserId) {
+      return jsonResponse(request, { error: "browserId is required" }, 400);
+    }
+
+    try {
+      const result = await ctx.runMutation(internal.tryQuota.consumeTry, {
+        browserId,
+        ipHash,
+      });
       return jsonResponse(request, result);
     } catch (error) {
-      if (error instanceof Error && error.message === TRY_LIMIT_REACHED) {
-        return jsonResponse(request, { error: TRY_LIMIT_REACHED }, 429);
+      if (error instanceof Error) {
+        if (error.message === DAILY_CAPACITY_REACHED) {
+          return jsonResponse(
+            request,
+            { error: DAILY_CAPACITY_REACHED },
+            429,
+          );
+        }
+        if (error.message === IP_RATE_LIMITED) {
+          return jsonResponse(request, { error: IP_RATE_LIMITED }, 429);
+        }
+        if (error.message === TRY_LIMIT_REACHED) {
+          return jsonResponse(request, { error: TRY_LIMIT_REACHED }, 429);
+        }
       }
       throw error;
     }
   }),
 });
 
-http.route({
-  path: "/web-try/upload-url",
-  method: "OPTIONS",
-  handler: httpAction(async (_ctx, request) => {
-    return new Response(null, { status: 204, headers: corsHeaders(request) });
-  }),
-});
+// ── POST /web-try/upload-url { browserId } ───────────────
 
 http.route({
   path: "/web-try/upload-url",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    const ipHash = await hashIp(getClientIp(request));
-    const quota = await ctx.runQuery(internal.tryQuota.getQuotaForIp, { ipHash });
-    if (quota.remaining === 0) {
-      return jsonResponse(request, { error: TRY_LIMIT_REACHED }, 429);
+    let browserId = "";
+    try {
+      const body = (await request.json()) as { browserId?: string };
+      browserId = body.browserId ?? "";
+    } catch {
+      // empty body
     }
+
+    if (!browserId) {
+      return jsonResponse(request, { error: "browserId is required" }, 400);
+    }
+
+    const quota = await ctx.runQuery(internal.tryQuota.getQuota, { browserId });
+    if (quota.remaining === 0) {
+      const errorCode = quota.reason === "daily_capacity"
+        ? DAILY_CAPACITY_REACHED
+        : TRY_LIMIT_REACHED;
+      return jsonResponse(request, { error: errorCode }, 429);
+    }
+
     const uploadUrl = await ctx.storage.generateUploadUrl();
     return jsonResponse(request, { uploadUrl });
   }),
