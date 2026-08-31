@@ -22,6 +22,19 @@ Web try uses Convex for file upload and an OpenAI vision action.
 
 During development, keep `npx convex dev` running so backend functions stay synced.
 
+### Try quota (IP-based)
+
+Web try limits each visitor to **Analyze** taps per IP (default **2**). Configure on the Convex deployment:
+
+```bash
+npx convex env set WEB_TRY_LIMIT 2 --prod
+npx convex env set IP_HASH_SALT "$(openssl rand -hex 32)" --prod
+```
+
+When quota is exhausted, **Try now** scrolls to the waitlist. Clarifications on the same photo do not consume extra tries.
+
+For production, set `NEXT_PUBLIC_CONVEX_URL` to your cloud Convex URL in Vercel (not `127.0.0.1`).
+
 Run `npm run typecheck` and `npm run build` before deployment.
 
 ## Deployment

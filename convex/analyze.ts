@@ -1,8 +1,10 @@
 "use node";
 
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { TRY_NONCE_INVALID } from "./tryQuota";
 
 const PROMPT =
   "You are ShowNext, an assistant for non-technical Android users. Analyze the screenshot and return exactly one safe next action using only visible information. Do not invent controls or provide multiple steps. If uncertain, ask one short clarification question. Do not recommend approving payments, entering OTPs, passwords, PINs, deleting accounts, factory resets, bypassing security warnings, installing unknown APKs, or suspicious permissions. Return valid JSON only with screenSummary, nextStep, targetBox, confidence, needsClarification, and warning. nextStep must be one plain sentence telling the user what to tap (for example: \"Tap Continue at the bottom of the screen.\"). Do not include location hints or phrases like \"Look main screen\" in nextStep. targetBox must be an object {x, y, width, height} with normalized coordinates from 0 to 1 relative to the screenshot, bounding the control named in nextStep. If you cannot confidently locate that control, set targetBox to null — never guess.";
@@ -90,11 +92,27 @@ export const analyzeScreen = action({
   args: {
     storageId: v.id("_storage"),
     clarification: v.optional(v.string()),
+    nonce: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<AnalysisResult> => {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       throw new Error("OPENAI_API_KEY is not configured on the Convex deployment.");
+    }
+
+    const authorized = await ctx.runQuery(internal.tryQuota.isStorageAuthorized, {
+      storageId: args.storageId,
+    });
+
+    if (authorized) {
+      // Clarification on an already-authorized photo — no new try consumed.
+    } else if (args.nonce) {
+      await ctx.runMutation(internal.tryQuota.redeemNonce, {
+        nonce: args.nonce,
+        storageId: args.storageId,
+      });
+    } else {
+      throw new Error(TRY_NONCE_INVALID);
     }
 
     const blob = await ctx.storage.get(args.storageId);
