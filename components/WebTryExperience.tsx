@@ -492,48 +492,42 @@ export function WebTryExperience({
 
             {cameraError && <p className="web-try-page__error">{cameraError}</p>}
 
-            <div className="web-try-page__frame">
-              {showPreview ? (
-                // eslint-disable-next-line @next/next/no-img-element
+            {showPreview ? (
+              <div className="web-try-page__frame">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img className="web-try-page__preview" src={previewUrl} alt="Captured screen preview" />
-              ) : (
-                <>
-                  <video ref={videoRef} className="web-try-page__video" playsInline muted aria-label="Camera preview" />
-                  {startingCamera && <p className="web-try-page__hint">Starting camera…</p>}
-                </>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="web-try-page__input-card">
+                <button
+                  className="web-try-page__input-option"
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                    <polyline points="17 8 12 3 7 8" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                    <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <span>Upload</span>
+                </button>
+                <div className="web-try-page__input-divider" />
+                <button
+                  className="web-try-page__input-option"
+                  type="button"
+                  onClick={() => void takePhoto()}
+                  disabled={startingCamera || Boolean(cameraError)}
+                >
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                    <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <span>Camera</span>
+                </button>
+              </div>
+            )}
 
-            <div className="web-try-page__actions">
-              {showPreview ? (
-                <>
-                  <button className="web-try-page__control web-try-page__primary" type="button" onClick={onAnalyze}>
-                    Analyze
-                  </button>
-                  <button className="web-try-page__control web-try-page__secondary" type="button" onClick={onRetake}>
-                    Retake
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    className="web-try-page__control web-try-page__primary"
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    Upload screenshot
-                  </button>
-                  <button
-                    className="web-try-page__control web-try-page__secondary"
-                    type="button"
-                    onClick={() => void takePhoto()}
-                    disabled={startingCamera || Boolean(cameraError)}
-                  >
-                    Take photo with camera
-                  </button>
-                </>
-              )}
-            </div>
+            <video ref={videoRef} className="sr-only" playsInline muted aria-hidden="true" />
 
             <div className="web-try-page__context">
               <div className="web-try-context-field">
@@ -594,6 +588,17 @@ export function WebTryExperience({
                 </p>
               ) : null}
             </div>
+
+            {showPreview && (
+              <div className="web-try-page__actions">
+                <button className="web-try-page__control web-try-page__primary" type="button" onClick={onAnalyze}>
+                  Analyze
+                </button>
+                <button className="web-try-page__control web-try-page__secondary" type="button" onClick={onRetake}>
+                  Retake
+                </button>
+              </div>
+            )}
 
             <input
               ref={fileInputRef}
