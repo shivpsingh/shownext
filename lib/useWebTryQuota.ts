@@ -18,7 +18,7 @@ export function useWebTryQuota() {
   const refresh = useCallback(async (): Promise<TryQuota> => {
     const siteUrl = getConvexSiteUrl();
     if (!siteUrl) {
-      const fallback: TryQuota = { remaining: 0, limit: 2, used: 0 };
+      const fallback: TryQuota = { remaining: 2, limit: 2, used: 0 };
       setQuota(fallback);
       return fallback;
     }
@@ -55,7 +55,7 @@ export function useWebTryQuota() {
 
   useEffect(() => {
     void refresh()
-      .catch(() => setQuota({ remaining: 0, limit: 2, used: 0 }))
+      .catch(() => setQuota({ remaining: 2, limit: 2, used: 0 }))
       .finally(() => setLoading(false));
   }, [refresh]);
 
