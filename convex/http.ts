@@ -92,4 +92,26 @@ http.route({
   }),
 });
 
+http.route({
+  path: "/web-try/upload-url",
+  method: "OPTIONS",
+  handler: httpAction(async (_ctx, request) => {
+    return new Response(null, { status: 204, headers: corsHeaders(request) });
+  }),
+});
+
+http.route({
+  path: "/web-try/upload-url",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const ipHash = await hashIp(getClientIp(request));
+    const quota = await ctx.runQuery(internal.tryQuota.getQuotaForIp, { ipHash });
+    if (quota.remaining === 0) {
+      return jsonResponse(request, { error: TRY_LIMIT_REACHED }, 429);
+    }
+    const uploadUrl = await ctx.storage.generateUploadUrl();
+    return jsonResponse(request, { uploadUrl });
+  }),
+});
+
 export default http;
