@@ -1823,20 +1823,11 @@ body.web-try-active {
   }
 
   .web-try-result__card-slot {
-    order: 2;
     margin-bottom: 0;
     margin-top: 0;
-    position: sticky;
-    bottom: 0;
-    z-index: 10;
-    padding: 12px 0;
-    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-    background: linear-gradient(to top, var(--arctic-deep) 60%, transparent);
   }
 
   .web-try-result-image {
-    order: 1;
-    padding-bottom: 80px;
   }
 
   .ai-action-card {

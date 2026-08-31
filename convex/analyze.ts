@@ -447,6 +447,7 @@ bottom-right = (1, 1)
 x and y are the TOP-LEFT corner of the box.
 
 The box must show WHERE THE USER SHOULD INTERACT.
+Center the box on the control's full visible boundary (outline, bezel, or tappable region), not on the label text printed on or near it.
 
 For:
 - physical button → box the physical button
