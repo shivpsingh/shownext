@@ -11,7 +11,7 @@ export function useAnalyzeScreen() {
   const analyzeScreen = useAction(api.analyze.analyzeScreen);
 
   const uploadAndAnalyze = useCallback(
-    async (blob: Blob) => {
+    async (blob: Blob, context?: string) => {
       const uploadUrl = await generateUploadUrl();
       const uploadResponse = await fetch(uploadUrl, {
         method: "POST",
@@ -28,7 +28,11 @@ export function useAnalyzeScreen() {
         throw new Error("Upload did not return a storage id.");
       }
 
-      const analysis = (await analyzeScreen({ storageId: payload.storageId })) as ScreenAnalysis;
+      const trimmedContext = context?.trim();
+      const analysis = (await analyzeScreen({
+        storageId: payload.storageId,
+        ...(trimmedContext ? { clarification: trimmedContext } : {}),
+      })) as ScreenAnalysis;
       return { analysis, storageId: payload.storageId };
     },
     [analyzeScreen, generateUploadUrl],

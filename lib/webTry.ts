@@ -2,8 +2,6 @@ export type DemoMode = "apk" | "webTry";
 
 export type WebTryPhase =
   | "idle"
-  | "centering"
-  | "handoff"
   | "camera"
   | "preview"
   | "uploading"

@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DemoMode, WebTryPhase } from "../lib/webTry";
+import type { DemoMode } from "../lib/webTry";
 import { AppIconImage } from "./phoneAppIcons";
 import { LogoMark } from "./LogoMark";
 
@@ -10,9 +10,6 @@ type ViewName = "home" | "downloads";
 
 type PhoneDemoProps = {
   demoMode?: DemoMode;
-  webTryPhase?: WebTryPhase;
-  cameraPulse?: boolean;
-  onCenteringComplete?: () => void;
 };
 
 function GuideLabel() {
@@ -64,15 +61,21 @@ function StatusBar() {
           {time}
         </span>
         <span className="notify-icon" title="Notifications" aria-label="Notifications">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 22a2.5 2.5 0 002.45-2h-4.9A2.5 2.5 0 0012 22z" fill="currentColor" />
-            <path d="M18 16V11a6 6 0 10-12 0v5l-2 2v1h16v-1l-2-2z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+            <path d="M18 16V11a6 6 0 10-12 0v5l-2 2v1h16v-1l-2-2z" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </span>
       </div>
       <div className="status-right">
         <span className="status-icon wifi" title="Wi-Fi">
-          <svg width="16" height="12" viewBox="0 0 24 18" fill="currentColor" aria-hidden="true">
+          <svg
+            width="20"
+            height="14"
+            viewBox="0 -2 24 20"
+            fill="currentColor"
+            aria-hidden="true"
+          >
             <path d="M1 8.5 3.5 11c4.14-4.14 10.86-4.14 15 0l2.5-2.5C15.5 2.5 8.5 2.5 1 8.5Zm8 7.5 3-3c-1.65-1.65-4.35-1.65-6 0l3 3ZM5 12.5 7 14.5c2.76-2.76 7.24-2.76 10 0l2-2C14.5 9 9.5 9 5 12.5Z" />
           </svg>
         </span>
@@ -91,12 +94,7 @@ function StatusBar() {
   );
 }
 
-export function PhoneDemo({
-  demoMode = "apk",
-  webTryPhase = "idle",
-  cameraPulse = false,
-  onCenteringComplete,
-}: PhoneDemoProps) {
+export function PhoneDemo({ demoMode = "apk" }: PhoneDemoProps) {
   const [view, setView] = useState<ViewName>("home");
   const [guideOpen, setGuideOpen] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
@@ -157,29 +155,22 @@ export function PhoneDemo({
     return () => window.clearInterval(intervalId);
   }, []);
 
-  useEffect(() => {
-    if (demoMode !== "webTry" || webTryPhase !== "centering") return;
-    const timer = window.setTimeout(() => onCenteringComplete?.(), 1500);
-    return () => window.clearTimeout(timer);
-  }, [demoMode, onCenteringComplete, webTryPhase]);
-
   const webTryActive = demoMode === "webTry";
 
   return (
     <motion.div
-      className="phone-wrap"
+      className={`phone-wrap${webTryActive ? "" : " phone-wrap--floating"}`}
       id="try-demo"
       initial={{ opacity: 0, y: 28, rotate: 2 }}
-      animate={{ opacity: 1, y: 0, rotate: webTryActive ? 0 : 0 }}
+      animate={{ opacity: 1, y: 0, rotate: 0 }}
       transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1], delay: 0.15 }}
     >
-      <motion.div
-        className="phone"
-        role="application"
-        aria-label="ShowNext phone demonstration"
-        animate={webTryActive ? { y: 0 } : { y: [0, -6, 0] }}
-        transition={webTryActive ? { duration: 0.2 } : { duration: 5, repeat: Infinity, ease: "easeInOut" }}
-      >
+      <div className="phone-float">
+        <div
+          className="phone"
+          role="application"
+          aria-label="ShowNext phone demonstration"
+        >
         <div className="power-btn" aria-hidden="true" />
         <div className={`screen-shell ${view === "downloads" ? "screen-shell--downloads" : ""}`}>
           <div className="camera-hole" aria-hidden="true" />
@@ -206,21 +197,17 @@ export function PhoneDemo({
 
                   <div className="home-bottom">
                     <div className="home-apps home-apps--top" aria-label="Apps">
-                      <button className="app downloads" type="button" onClick={() => setView("downloads")}>
+                      <button className="app downloads" type="button" aria-label="Downloads" onClick={() => setView("downloads")}>
                         <AppIconImage name="downloads" />
-                        <div className="app-label">Downloads</div>
                       </button>
-                      <button className="app store" type="button">
+                      <button className="app store" type="button" aria-label="Play Store">
                         <AppIconImage name="play-store" />
-                        <div className="app-label">Play Store</div>
                       </button>
-                      <button className="app files" type="button">
+                      <button className="app files" type="button" aria-label="Files">
                         <AppIconImage name="files" />
-                        <div className="app-label">Files</div>
                       </button>
-                      <button className="app settings" type="button">
+                      <button className="app settings" type="button" aria-label="Settings">
                         <AppIconImage name="settings" />
-                        <div className="app-label">Settings</div>
                       </button>
                     </div>
 
@@ -235,21 +222,17 @@ export function PhoneDemo({
                     </div>
 
                     <div className="home-apps home-apps--bottom" aria-label="Dock">
-                      <button className="app phone-app" type="button">
+                      <button className="app phone-app" type="button" aria-label="Contact">
                         <AppIconImage name="phone" />
-                        <div className="app-label">Contact</div>
                       </button>
-                      <button className="app dock-messages" type="button">
+                      <button className="app dock-messages" type="button" aria-label="Messages">
                         <AppIconImage name="messages" />
-                        <div className="app-label">Messages</div>
                       </button>
-                      <button className="app photos" type="button">
+                      <button className="app photos" type="button" aria-label="Photos">
                         <AppIconImage name="photos" />
-                        <div className="app-label">Photos</div>
                       </button>
-                      <button className={`app camera-app ${cameraPulse ? "camera-app--pulse" : ""}`} type="button">
+                      <button className="app camera-app" type="button" aria-label="Camera">
                         <AppIconImage name="camera" />
-                        <div className="app-label">Camera</div>
                       </button>
                     </div>
                   </div>
@@ -345,7 +328,8 @@ export function PhoneDemo({
             <span />
           </div>
         </div>
-      </motion.div>
+        </div>
+      </div>
     </motion.div>
   );
 }

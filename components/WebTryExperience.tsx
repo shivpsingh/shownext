@@ -11,13 +11,76 @@ type WebTryExperienceProps = {
   analysis: ScreenAnalysis | null;
   errorMessage: string | null;
   clarificationInput: string;
+  userContext: string;
   onClose: () => void;
   onPhotoReady: (blob: Blob) => void;
   onRetake: () => void;
   onAnalyze: () => void;
   onClarificationInputChange: (value: string) => void;
+  onUserContextChange: (value: string) => void;
   onClarificationSubmit: () => void;
 };
+
+type SpeechRecognitionErrorEvent = {
+  error: string;
+  message?: string;
+};
+
+type SpeechRecognitionInstance = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  maxAlternatives: number;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+};
+
+type SpeechRecognitionEvent = {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+};
+
+type SpeechRecognitionResultList = {
+  length: number;
+  [index: number]: SpeechRecognitionResult;
+};
+
+type SpeechRecognitionResult = {
+  isFinal: boolean;
+  [index: number]: { transcript: string };
+};
+
+function getSpeechRecognition(): SpeechRecognitionInstance | null {
+  if (typeof window === "undefined") return null;
+  const win = window as Window & {
+    SpeechRecognition?: new () => SpeechRecognitionInstance;
+    webkitSpeechRecognition?: new () => SpeechRecognitionInstance;
+  };
+  const Ctor = win.SpeechRecognition ?? win.webkitSpeechRecognition;
+  return Ctor ? new Ctor() : null;
+}
+
+function speechErrorMessage(error: string): string {
+  switch (error) {
+    case "not-allowed":
+      return "Microphone access was blocked. Allow the mic in your browser settings to dictate.";
+    case "no-speech":
+      return "No speech detected. Try speaking again.";
+    case "audio-capture":
+      return "Could not access the microphone.";
+    case "network":
+      return "Dictation needs a network connection in this browser.";
+    case "aborted":
+      return "";
+    default:
+      return "Dictation stopped. Tap the mic to try again.";
+  }
+}
 
 async function blobFromCanvas(canvas: HTMLCanvasElement, quality = 0.85): Promise<Blob> {
   return new Promise((resolve, reject) => {
@@ -44,18 +107,28 @@ export function WebTryExperience({
   analysis,
   errorMessage,
   clarificationInput,
+  userContext,
   onClose,
   onPhotoReady,
   onRetake,
   onAnalyze,
   onClarificationInputChange,
+  onUserContextChange,
   onClarificationSubmit,
 }: WebTryExperienceProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const dictationBaseRef = useRef("");
+  const onUserContextChangeRef = useRef(onUserContextChange);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [startingCamera, setStartingCamera] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const [speechError, setSpeechError] = useState<string | null>(null);
+
+  onUserContextChangeRef.current = onUserContextChange;
 
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -104,6 +177,96 @@ export function WebTryExperience({
 
   useEffect(() => () => stopStream(), [stopStream]);
 
+  useEffect(() => {
+    const recognition = getSpeechRecognition();
+    if (!recognition) return;
+
+    setSpeechSupported(true);
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      setSpeechError(null);
+    };
+
+    recognition.onresult = (event) => {
+      let interimText = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        const transcript = result[0]?.transcript ?? "";
+        if (result.isFinal) {
+          dictationBaseRef.current += transcript;
+        } else {
+          interimText += transcript;
+        }
+      }
+      const combined = `${dictationBaseRef.current}${interimText}`.trim();
+      onUserContextChangeRef.current(combined);
+    };
+
+    recognition.onend = () => setIsListening(false);
+
+    recognition.onerror = (event) => {
+      setIsListening(false);
+      const message = speechErrorMessage(event.error);
+      if (message) setSpeechError(message);
+    };
+
+    recognitionRef.current = recognition;
+
+    return () => {
+      recognition.abort();
+      recognitionRef.current = null;
+    };
+  }, []);
+
+  const stopListening = useCallback(() => {
+    recognitionRef.current?.stop();
+    setIsListening(false);
+  }, []);
+
+  useEffect(() => {
+    if (phase !== "camera" && phase !== "preview") {
+      stopListening();
+    }
+  }, [phase, stopListening]);
+
+  const toggleListening = async () => {
+    const recognition = recognitionRef.current;
+    if (!recognition) {
+      setSpeechError("Dictation is not supported in this browser. Try Chrome or Edge.");
+      return;
+    }
+
+    if (isListening) {
+      stopListening();
+      return;
+    }
+
+    setSpeechError(null);
+    dictationBaseRef.current = userContext.trim() ? `${userContext.trim()} ` : "";
+
+    if (navigator.mediaDevices?.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      } catch {
+        setSpeechError("Microphone access was blocked. Allow the mic to dictate in English.");
+        return;
+      }
+    }
+
+    try {
+      recognition.start();
+    } catch {
+      setSpeechError("Could not start dictation. Tap the mic to try again.");
+      setIsListening(false);
+    }
+  };
+
   const takePhoto = async () => {
     const video = videoRef.current;
     if (!video || !video.videoWidth) return;
@@ -145,10 +308,10 @@ export function WebTryExperience({
       role="dialog"
       aria-modal="true"
       aria-label="Try ShowNext from the web"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1], delay: 0.15 }}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 8 }}
+      transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
     >
       <header className="web-try-page__header shell">
         <div className="web-try-page__brand">
@@ -266,28 +429,92 @@ export function WebTryExperience({
             <div className="web-try-page__actions">
               {showPreview ? (
                 <>
-                  <button className="hero-cta" type="button" onClick={onAnalyze}>
+                  <button className="web-try-page__control web-try-page__primary" type="button" onClick={onAnalyze}>
                     Analyze
                   </button>
-                  <button className="web-try-page__secondary" type="button" onClick={onRetake}>
+                  <button className="web-try-page__control web-try-page__secondary" type="button" onClick={onRetake}>
                     Retake
                   </button>
                 </>
               ) : (
                 <>
                   <button
-                    className="hero-cta"
+                    className="web-try-page__control web-try-page__primary"
                     type="button"
                     onClick={() => void takePhoto()}
                     disabled={startingCamera || Boolean(cameraError)}
                   >
                     Take photo
                   </button>
-                  <button className="web-try-page__secondary" type="button" onClick={() => fileInputRef.current?.click()}>
+                  <button
+                    className="web-try-page__control web-try-page__secondary"
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
                     Upload photo instead
                   </button>
                 </>
               )}
+            </div>
+
+            <div className="web-try-page__context">
+              <div className="web-try-context-field">
+                <textarea
+                  id="webTryContext"
+                  className="web-try-page__control web-try-context-input"
+                  value={userContext}
+                  onChange={(event) => {
+                    if (isListening) stopListening();
+                    setSpeechError(null);
+                    onUserContextChange(event.target.value);
+                  }}
+                  placeholder="What's on your mind? Optional — describe what's on screen or tap the mic to speak"
+                  aria-label="Optional context — describe what's on screen or tap the mic to speak in English"
+                  rows={3}
+                />
+                <button
+                  className={`web-try-context-mic ${isListening ? "web-try-context-mic--active" : ""}`}
+                  type="button"
+                  onClick={() => void toggleListening()}
+                  aria-label={
+                    isListening
+                      ? "Stop dictation"
+                      : speechSupported
+                        ? "Dictate in English"
+                        : "Dictation not supported in this browser"
+                  }
+                  aria-pressed={isListening}
+                  disabled={!speechSupported}
+                  title={speechSupported ? "Speak in English" : "Use Chrome or Edge for dictation"}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path
+                      d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z"
+                      stroke="currentColor"
+                      strokeWidth="1.75"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M19 11a7 7 0 0 1-14 0M12 18v3"
+                      stroke="currentColor"
+                      strokeWidth="1.75"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+              {isListening ? (
+                <p className="web-try-context-status web-try-context-status--listening" role="status">
+                  Listening… speak in English
+                </p>
+              ) : null}
+              {speechError ? (
+                <p className="web-try-context-status web-try-context-status--error" role="alert">
+                  {speechError}
+                </p>
+              ) : null}
             </div>
 
             <input
