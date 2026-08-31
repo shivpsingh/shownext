@@ -2,9 +2,9 @@
 
 import sharp from "sharp";
 
-const GRID_COLS = 5;
-const GRID_ROWS = 8;
-const ROW_LETTERS = "ABCDEFGH";
+const GRID_COLS = 8;
+const GRID_ROWS = 12;
+const ROW_LETTERS = "ABCDEFGHIJKL";
 const LINE_COLOR = "rgba(255,255,0,0.45)";
 const LABEL_BG = "rgba(0,0,0,0.55)";
 const LABEL_FG = "#fff";
