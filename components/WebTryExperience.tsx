@@ -19,6 +19,8 @@ type WebTryExperienceProps = {
   onClarificationInputChange: (value: string) => void;
   onUserContextChange: (value: string) => void;
   onClarificationSubmit: () => void;
+  limitExhausted?: boolean;
+  onJoinWaitlist?: () => void;
 };
 
 type SpeechRecognitionErrorEvent = {
@@ -151,6 +153,8 @@ export function WebTryExperience({
   onClarificationInputChange,
   onUserContextChange,
   onClarificationSubmit,
+  limitExhausted = false,
+  onJoinWaitlist,
 }: WebTryExperienceProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -458,12 +462,20 @@ export function WebTryExperience({
 
               {phase === "error" && (
                 <>
-                  <p className="web-try-page__eyebrow">Something went wrong</p>
-                  <h2>Could not analyze that screen</h2>
-                  <p className="web-try-page__lede">{errorMessage ?? "Try again with a clearer photo."}</p>
-                  <button className="hero-cta" type="button" onClick={onRetake}>
-                    Try another photo
-                  </button>
+                  <p className="web-try-page__eyebrow">{limitExhausted ? "Free tries used" : "Something went wrong"}</p>
+                  <h2>{limitExhausted ? "Join the waitlist for more" : "Could not analyze that screen"}</h2>
+                  <p className="web-try-page__lede">
+                    {errorMessage ?? (limitExhausted ? "You've used your free tries for now." : "Try again with a clearer photo.")}
+                  </p>
+                  {limitExhausted ? (
+                    <button className="hero-cta" type="button" onClick={onJoinWaitlist ?? onClose}>
+                      Join the waitlist
+                    </button>
+                  ) : (
+                    <button className="hero-cta" type="button" onClick={onRetake}>
+                      Try another photo
+                    </button>
+                  )}
                 </>
               )}
             </motion.div>

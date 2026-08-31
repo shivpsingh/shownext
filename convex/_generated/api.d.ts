@@ -9,6 +9,8 @@
  */
 
 import type * as analyze from "../analyze.js";
+import type * as http from "../http.js";
+import type * as tryQuota from "../tryQuota.js";
 import type * as uploads from "../uploads.js";
 import type * as waitlist from "../waitlist.js";
 
@@ -20,6 +22,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   analyze: typeof analyze;
+  http: typeof http;
+  tryQuota: typeof tryQuota;
   uploads: typeof uploads;
   waitlist: typeof waitlist;
 }>;

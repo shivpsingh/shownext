@@ -4,7 +4,29 @@ import { useAction, useMutation } from "convex/react";
 import { useCallback } from "react";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
+import { getConvexSiteUrl } from "./convexSite";
+import { TRY_LIMIT_REACHED } from "./useWebTryQuota";
 import { MAX_CLARIFICATION_ROUNDS, type ScreenAnalysis } from "../lib/webTry";
+
+async function consumeTryFromSite(): Promise<string> {
+  const siteUrl = getConvexSiteUrl();
+  if (!siteUrl) {
+    throw new Error("Convex is not configured.");
+  }
+
+  const response = await fetch(`${siteUrl}/web-try/consume`, { method: "POST" });
+  if (response.status === 429) {
+    const body = (await response.json()) as { error?: string };
+    throw new Error(body.error ?? TRY_LIMIT_REACHED);
+  }
+
+  if (!response.ok) {
+    throw new Error("Could not consume try.");
+  }
+
+  const data = (await response.json()) as { nonce: string };
+  return data.nonce;
+}
 
 export function useAnalyzeScreen() {
   const generateUploadUrl = useMutation(api.uploads.generateUploadUrl);
@@ -28,9 +50,11 @@ export function useAnalyzeScreen() {
         throw new Error("Upload did not return a storage id.");
       }
 
+      const nonce = await consumeTryFromSite();
       const trimmedContext = context?.trim();
       const analysis = (await analyzeScreen({
         storageId: payload.storageId,
+        nonce,
         ...(trimmedContext ? { clarification: trimmedContext } : {}),
       })) as ScreenAnalysis;
       return { analysis, storageId: payload.storageId };
