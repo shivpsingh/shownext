@@ -94,7 +94,7 @@ a {
   position: relative;
   min-height: 100vh;
   padding: 48px 0 48px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .hero-stage::before {
@@ -121,6 +121,9 @@ a {
   align-items: center;
   justify-content: space-between;
   padding: 28px 0 12px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 .wordmark {
