@@ -1,12 +1,25 @@
 import type { Metadata, Viewport } from "next";
-import { Roboto } from "next/font/google";
+import { Fira_Sans, Overlock, PT_Sans } from "next/font/google";
+import { ConvexClientProvider } from "./ConvexClientProvider";
 import { SmoothScroll } from "../components/SmoothScroll";
 import "./globals.css";
 
-const roboto = Roboto({
+const ptSans = PT_Sans({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "700"],
-  variable: "--font-roboto",
+  weight: ["400", "700"],
+  variable: "--font-pt-sans",
+});
+
+const overlock = Overlock({
+  subsets: ["latin"],
+  weight: ["400", "700", "900"],
+  variable: "--font-overlock",
+});
+
+const firaSans = Fira_Sans({
+  subsets: ["latin"],
+  weight: ["300", "400", "500"],
+  variable: "--font-fira-sans",
 });
 
 export const metadata: Metadata = {
@@ -20,15 +33,17 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#f8faff",
+  themeColor: "#0a1628",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={roboto.variable}>
-        <SmoothScroll />
-        {children}
+      <body className={`${ptSans.variable} ${overlock.variable} ${firaSans.variable}`}>
+        <ConvexClientProvider>
+          <SmoothScroll />
+          {children}
+        </ConvexClientProvider>
       </body>
     </html>
   );
