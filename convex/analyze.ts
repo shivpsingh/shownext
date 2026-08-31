@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { TRY_NONCE_INVALID } from "./tryQuota";
-import { prepareImages } from "./gridOverlay";
+import { prepareImageForAnalysis } from "./imagePrep";
 
 const PROMPT = `
 You are ShowNext, a visual action assistant.
@@ -417,7 +417,12 @@ The grid itself is NOT part of the interface.
 
 Never select or describe grid lines as controls.
 
-All coordinates refer to the FULL CLEAN ORIGINAL IMAGE.
+All coordinates refer to the FULL CLEAN IMAGE PROVIDED TO YOU FOR THIS REQUEST.
+If the source image was resized before being provided, use the provided image as the coordinate reference.
+Coordinates are normalized 0–1, so they remain proportional regardless of image resolution.
+The image may be narrow, tall, portrait-oriented, or a mobile screenshot. Small visible controls may still be valid interaction targets.
+For touchscreen buttons, box the visible tappable control boundary when identifiable, not only the text glyphs inside it.
+Do not compensate for CSS layout, viewport scaling, or frontend rendering.
 
 --------------------------------------------------
 13. BOUNDING BOX
@@ -820,19 +825,40 @@ type AnalysisResult = {
   warning?: string;
 };
 
-function parseTargetBox(raw: unknown): TargetBox | null {
+const BOX_TOLERANCE = 0.02;
+
+function parseTargetBox(raw: unknown, sessionId?: string): TargetBox | null {
   if (!raw || typeof raw !== "object") return null;
   const b = raw as Record<string, unknown>;
   const x = Number(b.x);
   const y = Number(b.y);
   const w = Number(b.width);
   const h = Number(b.height);
-  if ([x, y, w, h].some((v) => !Number.isFinite(v))) return null;
-  if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > 1.05 || y + h > 1.05) return null;
-  return { x: Math.max(0, x), y: Math.max(0, y), width: Math.min(w, 1 - x), height: Math.min(h, 1 - y) };
+
+  if ([x, y, w, h].some((n) => !Number.isFinite(n))) {
+    console.warn(`[analyze:${sessionId}] box has non-finite values: ${JSON.stringify(raw)}`);
+    return null;
+  }
+
+  if (x < -BOX_TOLERANCE || y < -BOX_TOLERANCE || w <= 0 || h <= 0) {
+    console.warn(`[analyze:${sessionId}] box rejected (negative/zero): ${JSON.stringify(raw)}`);
+    return null;
+  }
+
+  if (x + w > 1 + BOX_TOLERANCE || y + h > 1 + BOX_TOLERANCE) {
+    console.warn(`[analyze:${sessionId}] box rejected (out of bounds): ${JSON.stringify(raw)}`);
+    return null;
+  }
+
+  return {
+    x: Math.max(0, Math.min(x, 1)),
+    y: Math.max(0, Math.min(y, 1)),
+    width: Math.min(w, 1 - Math.max(0, x)),
+    height: Math.min(h, 1 - Math.max(0, y)),
+  };
 }
 
-function parseAnalysis(raw: unknown): AnalysisResult {
+function parseAnalysis(raw: unknown, sessionId?: string): AnalysisResult {
   if (!raw || typeof raw !== "object") {
     throw new Error("Analyzer returned invalid JSON.");
   }
@@ -860,7 +886,7 @@ function parseAnalysis(raw: unknown): AnalysisResult {
     screenSummary,
     label,
     instruction,
-    box: parseTargetBox(record.box),
+    box: parseTargetBox(record.box, sessionId),
     confidence: typeof record.confidence === "number" ? record.confidence : 0,
     needsClarification: Boolean(record.needsClarification),
     warning,
@@ -872,8 +898,17 @@ export const analyzeScreen = action({
     storageId: v.id("_storage"),
     clarification: v.optional(v.string()),
     nonce: v.optional(v.string()),
+    captureType: v.optional(v.string()),
+    viewportWidth: v.optional(v.number()),
+    viewportHeight: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<AnalysisResult> => {
+    const sessionId = crypto.randomUUID().slice(0, 8);
+    const t0 = Date.now();
+    const useGrid = (process.env.USE_GRID_IMAGE ?? "false") === "true";
+
+    console.log(`[analyze:${sessionId}] START storageId=${args.storageId} hasNonce=${!!args.nonce} hasClarification=${!!args.clarification} captureType=${args.captureType ?? "unknown"} useGrid=${useGrid}`);
+
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       throw new Error("OPENAI_API_KEY is not configured on the Convex deployment.");
@@ -882,6 +917,7 @@ export const analyzeScreen = action({
     const authorized = await ctx.runQuery(internal.tryQuota.isStorageAuthorized, {
       storageId: args.storageId,
     });
+    console.log(`[analyze:${sessionId}] auth=${authorized ? "existing" : args.nonce ? "nonce" : "NONE"}`);
 
     if (authorized) {
       // Clarification on an already-authorized photo — no new try consumed.
@@ -898,15 +934,44 @@ export const analyzeScreen = action({
     if (!blob) {
       throw new Error("Image not found.");
     }
+    console.log(`[analyze:${sessionId}] blob size=${blob.size} type=${blob.type}`);
 
     const rawBuffer = Buffer.from(await blob.arrayBuffer());
-    const { clean, gridded } = await prepareImages(rawBuffer);
+    const { clean, gridded, width: imgW, height: imgH } = await prepareImageForAnalysis(rawBuffer, { useGrid });
     const cleanBase64 = clean.toString("base64");
-    const gridBase64 = gridded.toString("base64");
-    const context = args.clarification?.trim()
+    console.log(`[analyze:${sessionId}] image prepared ${imgW}x${imgH} clean=${clean.length}B grid=${gridded ? gridded.length + "B" : "off"} (+${Date.now() - t0}ms)`);
+
+    let contextText = args.clarification?.trim()
       ? args.clarification.trim()
       : "The user is asking what to do next on this screen.";
 
+    const imageContext: Record<string, string | number> = {
+      captureType: args.captureType ?? "unknown",
+      imageWidth: imgW,
+      imageHeight: imgH,
+    };
+    if (args.viewportWidth) imageContext.viewportWidth = args.viewportWidth;
+    if (args.viewportHeight) imageContext.viewportHeight = args.viewportHeight;
+
+    contextText += `\n\nIMAGE CONTEXT:\n${JSON.stringify(imageContext)}`;
+    console.log(`[analyze:${sessionId}] context="${contextText.slice(0, 200)}"`);
+
+    const imageContent: Array<{ type: string; text?: string; image_url?: { url: string; detail: string } }> = [
+      { type: "text", text: `${PROMPT}\n\nContext: ${contextText}` },
+      {
+        type: "image_url",
+        image_url: { url: `data:image/jpeg;base64,${cleanBase64}`, detail: "high" },
+      },
+    ];
+
+    if (gridded) {
+      imageContent.push({
+        type: "image_url",
+        image_url: { url: `data:image/jpeg;base64,${gridded.toString("base64")}`, detail: "high" },
+      });
+    }
+
+    const t1 = Date.now();
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -916,39 +981,43 @@ export const analyzeScreen = action({
       body: JSON.stringify({
         model: "gpt-5.6-luna",
         response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: `${PROMPT}\n\nContext: ${context}` },
-              {
-                type: "image_url",
-                image_url: { url: `data:image/jpeg;base64,${cleanBase64}`, detail: "high" },
-              },
-              {
-                type: "image_url",
-                image_url: { url: `data:image/jpeg;base64,${gridBase64}`, detail: "high" },
-              },
-            ],
-          },
-        ],
+        messages: [{ role: "user", content: imageContent }],
       }),
     });
 
+    const apiMs = Date.now() - t1;
+    console.log(`[analyze:${sessionId}] OpenAI status=${response.status} latency=${apiMs}ms`);
+
     if (!response.ok) {
+      const errBody = await response.text().catch(() => "");
+      console.error(`[analyze:${sessionId}] OpenAI ERROR body=${errBody.slice(0, 500)}`);
       throw new Error(`OpenAI request failed with HTTP ${response.status}.`);
     }
 
     const data = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
     };
+
+    if (data.usage) {
+      console.log(`[analyze:${sessionId}] tokens prompt=${data.usage.prompt_tokens} completion=${data.usage.completion_tokens} total=${data.usage.total_tokens}`);
+    }
 
     const content = data.choices?.[0]?.message?.content;
     if (!content) {
+      console.error(`[analyze:${sessionId}] empty response data=${JSON.stringify(data).slice(0, 500)}`);
       throw new Error("OpenAI returned an empty response.");
     }
 
+    console.log(`[analyze:${sessionId}] RAW RESPONSE:\n${content}`);
+
     const cleaned = content.replace(/```json|```/g, "").trim();
-    return parseAnalysis(JSON.parse(cleaned));
+    const parsed = JSON.parse(cleaned);
+    const result = parseAnalysis(parsed, sessionId);
+
+    console.log(`[analyze:${sessionId}] PARSED label="${result.label}" instruction="${result.instruction.slice(0, 100)}" box=${result.box ? JSON.stringify(result.box) : "null"} confidence=${result.confidence} clarify=${result.needsClarification} warning=${result.warning ?? "none"}`);
+    console.log(`[analyze:${sessionId}] DONE total=${Date.now() - t0}ms`);
+
+    return result;
   },
 });

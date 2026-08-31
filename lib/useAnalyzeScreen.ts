@@ -24,7 +24,7 @@ export function useAnalyzeScreen() {
   const analyzeScreen = useAction(api.analyze.analyzeScreen);
 
   const uploadAndAnalyze = useCallback(
-    async (blob: Blob, context?: string) => {
+    async (blob: Blob, context?: string, captureType?: string) => {
       const { uploadUrl } = await fetchSiteEndpoint<{ uploadUrl: string }>("/web-try/upload-url");
       const uploadResponse = await fetch(uploadUrl, {
         method: "POST",
@@ -43,10 +43,15 @@ export function useAnalyzeScreen() {
 
       const { nonce } = await fetchSiteEndpoint<{ nonce: string }>("/web-try/consume");
       const trimmedContext = context?.trim();
+      const vw = typeof window !== "undefined" ? window.innerWidth : undefined;
+      const vh = typeof window !== "undefined" ? window.innerHeight : undefined;
       const analysis = (await analyzeScreen({
         storageId: payload.storageId,
         nonce,
         ...(trimmedContext ? { clarification: trimmedContext } : {}),
+        ...(captureType ? { captureType } : {}),
+        ...(vw ? { viewportWidth: vw } : {}),
+        ...(vh ? { viewportHeight: vh } : {}),
       })) as ScreenAnalysis;
       return { analysis, storageId: payload.storageId };
     },
