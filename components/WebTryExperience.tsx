@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ScreenAnalysis, WebTryPhase } from "../lib/webTry";
+import { resolveTargetRing, type ScreenAnalysis, type WebTryPhase } from "../lib/webTry";
 import { LogoMark } from "./LogoMark";
 
 type WebTryExperienceProps = {
@@ -104,23 +104,24 @@ const LONG_WAIT_MS = 45000;
 
 function ResultScreenshot({
   previewUrl,
-  targetBox,
+  analysis,
 }: {
   previewUrl: string;
-  targetBox: ScreenAnalysis["targetBox"];
+  analysis: ScreenAnalysis;
 }) {
+  const ring = resolveTargetRing(analysis);
   return (
     <div className="web-try-result-image">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={previewUrl} alt="Captured screen" />
-      {targetBox ? (
+      {ring ? (
         <div
           className="web-try-target-ring"
           style={{
-            left: `${targetBox.x * 100}%`,
-            top: `${targetBox.y * 100}%`,
-            width: `${targetBox.width * 100}%`,
-            height: `${targetBox.height * 100}%`,
+            left: `${ring.x * 100}%`,
+            top: `${ring.y * 100}%`,
+            width: `${ring.width * 100}%`,
+            height: `${ring.height * 100}%`,
           }}
           aria-hidden="true"
         />
@@ -396,9 +397,9 @@ export function WebTryExperience({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
           >
-            <ResultScreenshot previewUrl={previewUrl} targetBox={analysis.targetBox} />
             {analysis.warning ? <p className="web-try-page__warning">{analysis.warning}</p> : null}
-            <p className="web-try-result-instruction">{analysis.nextStep}</p>
+            <p className="web-try-result-instruction">{analysis.instruction}</p>
+            <ResultScreenshot previewUrl={previewUrl} analysis={analysis} />
           </motion.div>
         ) : splitView && previewUrl ? (
           <>
@@ -442,7 +443,7 @@ export function WebTryExperience({
               {phase === "clarification" && analysis && (
                 <>
                   <p className="web-try-page__eyebrow">Quick question</p>
-                  <h2>{analysis.nextStep}</h2>
+                  <h2>{analysis.instruction}</h2>
                   <label className="web-try-clarify-label" htmlFor="webTryClarify">
                     Your answer
                   </label>
@@ -483,16 +484,11 @@ export function WebTryExperience({
           <div className="web-try-page__capture">
             <div className="web-try-page__intro">
               <p className="web-try-page__eyebrow">Try from the web</p>
-              <h2>Photograph the stuck screen</h2>
+              <h2>Screenshot simulation</h2>
               <p className="web-try-page__lede">
-                Point your camera at the phone or tablet. The photo is analyzed once and not saved.
+                Upload a screenshot to preview the guidance.
               </p>
             </div>
-
-            <p className="web-try-page__demo-note">
-              Upload a screenshot to test the guidance. The Android app will capture the parent&apos;s screen when
-              they tap the bubble.
-            </p>
 
             {cameraError && <p className="web-try-page__error">{cameraError}</p>}
 
@@ -538,6 +534,10 @@ export function WebTryExperience({
                 </>
               )}
             </div>
+
+            <p className="web-try-page__demo-note">
+              In the Android app, ShowNext captures the screen automatically — no photo needed.
+            </p>
 
             <div className="web-try-page__context">
               <div className="web-try-context-field">

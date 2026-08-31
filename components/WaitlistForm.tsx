@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useId, useState } from "react";
+import { useMutation } from "convex/react";
+import { api } from "../convex/_generated/api";
 
 type FormStatus = "idle" | "submitting" | "success" | "invalid" | "error";
 
@@ -13,8 +15,8 @@ export function WaitlistForm({ variant = "default" }: WaitlistFormProps) {
   const emailId = `${formId}-email`;
   const statusId = `${formId}-status`;
   const [email, setEmail] = useState("");
-  const [website, setWebsite] = useState("");
   const [status, setStatus] = useState<FormStatus>("idle");
+  const joinWaitlist = useMutation(api.waitlist.join);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -25,13 +27,9 @@ export function WaitlistForm({ variant = "default" }: WaitlistFormProps) {
     }
     setStatus("submitting");
     try {
-      const response = await fetch("/api/waitlist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: value, website }),
-      });
-      setStatus(response.ok ? "success" : response.status === 400 ? "invalid" : "error");
-      if (response.ok) setEmail("");
+      await joinWaitlist({ email: value });
+      setStatus("success");
+      setEmail("");
     } catch {
       setStatus("error");
     }
@@ -39,9 +37,9 @@ export function WaitlistForm({ variant = "default" }: WaitlistFormProps) {
 
   const message = (
     {
-      success: "You’re on the list. We’ll be in touch when the first build is ready.",
+      success: "You're on the list. We'll be in touch when the first build is ready.",
       invalid: "Enter a valid email address.",
-      error: "We couldn’t save your email. Try again.",
+      error: "We couldn't save your email. Try again.",
     } as Record<string, string>
   )[status];
 
@@ -63,12 +61,8 @@ export function WaitlistForm({ variant = "default" }: WaitlistFormProps) {
         disabled={status === "submitting" || status === "success"}
         aria-describedby={statusId}
       />
-      <label className="honeypot" aria-hidden="true">
-        Website
-        <input tabIndex={-1} autoComplete="off" value={website} onChange={(event) => setWebsite(event.target.value)} />
-      </label>
       <button type="submit" disabled={status === "submitting" || status === "success"}>
-        {status === "submitting" ? "Saving…" : status === "success" ? "You’re on the list" : variant === "pill" ? "Join waitlist" : "Join the early list"}
+        {status === "submitting" ? "Saving…" : status === "success" ? "You're on the list" : variant === "pill" ? "Join waitlist" : "Join the early list"}
         {variant === "default" ? <span aria-hidden="true">↗</span> : null}
       </button>
       {message ? (

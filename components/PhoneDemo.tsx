@@ -101,7 +101,7 @@ export function PhoneDemo({ demoMode = "apk" }: PhoneDemoProps) {
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [installStarted, setInstallStarted] = useState(false);
-  const [now, setNow] = useState(() => new Date());
+  const [now, setNow] = useState<Date | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const guideCopy =
@@ -190,8 +190,8 @@ export function PhoneDemo({ demoMode = "apk" }: PhoneDemoProps) {
                 >
                   <div className="home-main">
                     <div className="at-a-glance">
-                      <span className="date">{formatPhoneDate(now)}</span>
-                      <h1>{getTimeGreeting(now)}</h1>
+                      <span className="date">{now ? formatPhoneDate(now) : "\u00A0"}</span>
+                      <h1>{now ? getTimeGreeting(now) : "\u00A0"}</h1>
                     </div>
                   </div>
 
