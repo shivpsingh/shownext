@@ -540,8 +540,8 @@ export function WebTryExperience({
                     setSpeechError(null);
                     onUserContextChange(event.target.value);
                   }}
-                  placeholder="What's on your mind? Optional — describe what's on screen or tap the mic to speak"
-                  aria-label="Optional context — describe what's on screen or tap the mic to speak in English"
+                  placeholder="Describe what you want to do — e.g. 'Turn on the washing machine' or 'Go to settings'"
+                  aria-label="Describe what you want to do (required)"
                   rows={3}
                 />
                 <button
@@ -592,7 +592,7 @@ export function WebTryExperience({
             <div className="web-try-page__actions">
               {showPreview ? (
                 <>
-                  <button className="web-try-page__control web-try-page__primary" type="button" onClick={onAnalyze}>
+                  <button className="web-try-page__control web-try-page__primary" type="button" onClick={onAnalyze} disabled={!userContext.trim()}>
                     Analyze
                   </button>
                   <button className="web-try-page__control web-try-page__secondary" type="button" onClick={onRetake}>
