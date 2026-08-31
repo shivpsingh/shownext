@@ -30,9 +30,7 @@ export type ScreenAnalysis = {
 export function resolveTargetRing(
   a: Pick<ScreenAnalysis, "label" | "instruction" | "box">,
 ): TargetBox | null {
-  const label = a.label.trim();
-  if (!label || !a.box) return null;
-  if (!a.instruction.includes(label)) return null;
+  if (!a.label.trim() || !a.box) return null;
   return a.box;
 }
 
