@@ -11,6 +11,7 @@
 import type * as analyze from "../analyze.js";
 import type * as gridOverlay from "../gridOverlay.js";
 import type * as http from "../http.js";
+import type * as imagePrep from "../imagePrep.js";
 import type * as tryQuota from "../tryQuota.js";
 import type * as waitlist from "../waitlist.js";
 
@@ -24,6 +25,7 @@ declare const fullApi: ApiFromModules<{
   analyze: typeof analyze;
   gridOverlay: typeof gridOverlay;
   http: typeof http;
+  imagePrep: typeof imagePrep;
   tryQuota: typeof tryQuota;
   waitlist: typeof waitlist;
 }>;

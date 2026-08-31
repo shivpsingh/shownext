@@ -308,6 +308,7 @@ function HeroSectionConnected() {
       const result = await uploadAndAnalyze(
         session.previewBlob,
         session.userContext.trim() || undefined,
+        "screenshot",
       );
       session.setStorageId(result.storageId);
       session.setAnalysis(result.analysis);

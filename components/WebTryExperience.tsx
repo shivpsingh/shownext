@@ -159,6 +159,7 @@ export function WebTryExperience({
 }: WebTryExperienceProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const dictationBaseRef = useRef("");
@@ -517,8 +518,7 @@ export function WebTryExperience({
                 <button
                   className="web-try-page__input-option"
                   type="button"
-                  onClick={() => void takePhoto()}
-                  disabled={startingCamera || Boolean(cameraError)}
+                  onClick={() => cameraInputRef.current?.click()}
                 >
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
@@ -618,6 +618,14 @@ export function WebTryExperience({
               className="sr-only"
               type="file"
               accept="image/*"
+              onChange={(event) => void handleFileChange(event)}
+            />
+            <input
+              ref={cameraInputRef}
+              className="sr-only"
+              type="file"
+              accept="image/*"
+              capture="environment"
               onChange={(event) => void handleFileChange(event)}
             />
           </div>
