@@ -1823,7 +1823,7 @@ body.web-try-active {
   }
 
   .web-try-result__card-slot {
-    margin-bottom: 0;
+    margin-bottom: 10px;
     margin-top: 0;
   }
 
