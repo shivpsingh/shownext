@@ -7,7 +7,7 @@ export function getConvexSiteUrl(): string | null {
   const url = getConvexCloudUrl();
   if (!url) return null;
   if (url.includes("127.0.0.1") || url.includes("localhost")) {
-    return url.replace(/\/$/, "");
+    return url.replace(/\/$/, "") + "/http";
   }
   return url.replace(".convex.cloud", ".convex.site").replace(/\/$/, "");
 }

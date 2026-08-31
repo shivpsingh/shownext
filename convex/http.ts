@@ -110,20 +110,15 @@ http.route({
       });
       return jsonResponse(request, result);
     } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === DAILY_CAPACITY_REACHED) {
-          return jsonResponse(
-            request,
-            { error: DAILY_CAPACITY_REACHED },
-            429,
-          );
-        }
-        if (error.message === IP_RATE_LIMITED) {
-          return jsonResponse(request, { error: IP_RATE_LIMITED }, 429);
-        }
-        if (error.message === TRY_LIMIT_REACHED) {
-          return jsonResponse(request, { error: TRY_LIMIT_REACHED }, 429);
-        }
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes(DAILY_CAPACITY_REACHED)) {
+        return jsonResponse(request, { error: DAILY_CAPACITY_REACHED }, 429);
+      }
+      if (msg.includes(IP_RATE_LIMITED)) {
+        return jsonResponse(request, { error: IP_RATE_LIMITED }, 429);
+      }
+      if (msg.includes(TRY_LIMIT_REACHED)) {
+        return jsonResponse(request, { error: TRY_LIMIT_REACHED }, 429);
       }
       throw error;
     }
