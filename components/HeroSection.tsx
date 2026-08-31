@@ -62,7 +62,7 @@ function HeroSectionView({
             animate={{ opacity: webTryActive ? 0 : 1, y: 0 }}
             transition={{ duration: 0.35, ease: fadeEase }}
           >
-            When your parent gets stuck on Android, ShowNext points to the one button they should tap.
+            Show your parent exactly what to tap.
           </motion.h1>
           <motion.p
             className="hero-tagline"
@@ -70,7 +70,7 @@ function HeroSectionView({
             animate={{ opacity: webTryActive ? 0 : 1, y: 0 }}
             transition={{ duration: 0.35, ease: fadeEase, delay: webTryActive ? 0 : 0.1 }}
           >
-            Less explaining. More doing.
+            When they get stuck on their phone and you are not there.
           </motion.p>
           {!webTryActive && (
             <motion.button
