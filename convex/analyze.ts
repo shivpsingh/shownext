@@ -3,19 +3,21 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
 import { TRY_NONCE_INVALID } from "./tryQuota";
+import { overlayGrid, cellToBox } from "./gridOverlay";
 
 const PROMPT = `You are ShowNext, an assistant for non-technical Android users. Analyze the screenshot and return exactly one safe next action using only visible information. Do not invent controls or provide multiple steps. If uncertain, ask one short clarification question. Do not recommend approving payments, entering OTPs, passwords, PINs, deleting accounts, factory resets, bypassing security warnings, installing unknown APKs, or suspicious permissions.
 
-Return valid JSON with these fields: screenSummary, label, instruction, box, confidence, needsClarification, warning.
+The screenshot has a labeled grid overlay with cells A1–H5 (rows A–H, columns 1–5). Each cell has a visible label in its center.
 
-CRITICAL — label, instruction, and box must all refer to the SAME single UI element:
+Return valid JSON with these fields: screenSummary, label, instruction, cell, confidence, needsClarification, warning.
+
+CRITICAL — label, instruction, and cell must all refer to the SAME single UI element:
 - label: the exact visible text on that control (e.g. "Continue", "Install", "Allow").
 - instruction: one plain sentence that quotes that same label (e.g. "Tap 'Continue' at the bottom of the screen."). Do not include location hints like "Look main screen".
-- box: an object {x, y, width, height} with normalized coordinates from 0 to 1 relative to the full screenshot image, tightly bounding that same control whose text you wrote in label. If you cannot confidently locate that exact control, set box to null — never guess, never box a different element.
+- cell: the grid cell label (e.g. "D3") whose area contains the center of that control. If you cannot confidently identify the cell, set cell to null.
 
-Never return a box for one control while naming a different control in label or instruction.`;
+Never return a cell for one control while naming a different control in label or instruction.`;
 
 type TargetBox = {
   x: number;
@@ -33,36 +35,6 @@ type AnalysisResult = {
   needsClarification: boolean;
   warning?: string;
 };
-
-function parseTargetBox(raw: unknown): TargetBox | null {
-  if (raw === null || raw === undefined) return null;
-  if (typeof raw !== "object") return null;
-
-  const box = raw as Record<string, unknown>;
-  const x = box.x;
-  const y = box.y;
-  const width = box.width;
-  const height = box.height;
-
-  if (
-    typeof x !== "number" ||
-    typeof y !== "number" ||
-    typeof width !== "number" ||
-    typeof height !== "number"
-  ) {
-    return null;
-  }
-
-  if ([x, y, width, height].some((value) => value < 0 || value > 1)) {
-    return null;
-  }
-
-  if (width <= 0 || height <= 0) {
-    return null;
-  }
-
-  return { x, y, width, height };
-}
 
 function parseAnalysis(raw: unknown): AnalysisResult {
   if (!raw || typeof raw !== "object") {
@@ -92,7 +64,7 @@ function parseAnalysis(raw: unknown): AnalysisResult {
     screenSummary,
     label,
     instruction,
-    box: parseTargetBox(record.box),
+    box: typeof record.cell === "string" ? cellToBox(record.cell) : null,
     confidence: typeof record.confidence === "number" ? record.confidence : 0,
     needsClarification: Boolean(record.needsClarification),
     warning,
@@ -131,7 +103,9 @@ export const analyzeScreen = action({
       throw new Error("Image not found.");
     }
 
-    const base64 = Buffer.from(await blob.arrayBuffer()).toString("base64");
+    const rawBuffer = Buffer.from(await blob.arrayBuffer());
+    const griddedBuffer = await overlayGrid(rawBuffer);
+    const base64 = griddedBuffer.toString("base64");
     const context = args.clarification?.trim()
       ? args.clarification.trim()
       : "The user is asking what to do next on this Android screen.";
