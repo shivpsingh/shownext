@@ -15,14 +15,19 @@ import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.widget.LinearLayout
+import android.widget.Button
+import android.widget.EditText
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import com.shownext.app.model.DetectedTarget
+import com.shownext.app.decision.ShowNextDecisionEngine
+import com.shownext.app.decision.UiElement
 import com.shownext.app.scanner.AccessibilityTargetScanner
 
 class ShowNextAccessibilityService : AccessibilityService() {
     private lateinit var windowManager: WindowManager
     private val scanner = AccessibilityTargetScanner()
+    private val decisionEngine = ShowNextDecisionEngine()
     private var bubble: TextView? = null
     private var panel: View? = null
     private var highlight: View? = null
@@ -57,8 +62,10 @@ class ShowNextAccessibilityService : AccessibilityService() {
 
     private fun openPanel() {
         clearHighlight(); val targets = scanner.scan(rootInActiveWindow); val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(28, 22, 28, 22); setBackgroundColor(Color.WHITE) }
-        val title = TextView(this).apply { text = if (targets.isEmpty()) "No usable controls found" else "What would you like help with?"; textSize = 20f; setTextColor(Color.DKGRAY); setPadding(0, 0, 0, 16) }; list.addView(title)
-        targets.forEach { target -> list.addView(targetRow(target, list)) }
+        val title = TextView(this).apply { text = "What would you like help with?"; textSize = 20f; setTextColor(Color.DKGRAY); setPadding(0, 0, 0, 16) }; list.addView(title)
+        val goalInput = EditText(this).apply { hint = "For example: make the text bigger"; textSize = 17f; minHeight = 58; contentDescription = "What do you need help with?" }; list.addView(goalInput)
+        val choose = Button(this).apply { text = "Find the next step"; minHeight = 56; setOnClickListener { val elements = targets.map { UiElement(it.id, text = it.label, className = it.role, clickable = true, enabled = true) }; val result = decisionEngine.choose(goalInput.text.toString(), rootInActiveWindow?.packageName?.toString().orEmpty(), elements); if (result.elementId != null) { remove(panel); panel = null; targets.firstOrNull { it.id == result.elementId }?.let(::showHighlight) } else { title.text = result.instruction } } }; list.addView(choose)
+        if (targets.isEmpty()) title.text = "No usable controls found on this screen"
         val close = TextView(this).apply { text = "Close"; textSize = 17f; setTextColor(Color.rgb(35, 75, 181)); setPadding(0, 18, 0, 8); setOnClickListener { remove(panel); panel = null } }; list.addView(close)
         panel = list; windowManager.addView(panel, panelParams())
     }

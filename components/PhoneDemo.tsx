@@ -1,32 +1,86 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { DemoMode } from "../lib/webTry";
+import { AppIconImage } from "./phoneAppIcons";
+import { LogoMark } from "./LogoMark";
 
 type ViewName = "home" | "downloads";
 
+type PhoneDemoProps = {
+  demoMode?: DemoMode;
+};
+
+function GuideLabel() {
+  return (
+    <span className="guide-label">
+      <LogoMark className="guide-label__mark" size={16} />
+      ShowNext
+    </span>
+  );
+}
+
+function getTimeGreeting(date: Date) {
+  const hour = date.getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+function formatPhoneDate(date: Date) {
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 function StatusBar() {
+  const [time, setTime] = useState("");
+
+  useEffect(() => {
+    const updateTime = () => {
+      setTime(
+        new Date().toLocaleTimeString([], {
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+      );
+    };
+
+    updateTime();
+    const intervalId = window.setInterval(updateTime, 1000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   return (
     <header className="status-bar" aria-label="Status bar">
       <div className="status-left">
+        <span className="status-time" aria-live="polite">
+          {time}
+        </span>
         <span className="notify-icon" title="Notifications" aria-label="Notifications">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 22a2.5 2.5 0 002.45-2h-4.9A2.5 2.5 0 0012 22z" fill="currentColor" />
-            <path d="M18 16V11a6 6 0 10-12 0v5l-2 2v1h16v-1l-2-2z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+            <path d="M18 16V11a6 6 0 10-12 0v5l-2 2v1h16v-1l-2-2z" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </span>
       </div>
       <div className="status-right">
+        <span className="status-icon wifi" title="Wi-Fi">
+          <svg
+            width="20"
+            height="14"
+            viewBox="0 -2 24 20"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M1 8.5 3.5 11c4.14-4.14 10.86-4.14 15 0l2.5-2.5C15.5 2.5 8.5 2.5 1 8.5Zm8 7.5 3-3c-1.65-1.65-4.35-1.65-6 0l3 3ZM5 12.5 7 14.5c2.76-2.76 7.24-2.76 10 0l2-2C14.5 9 9.5 9 5 12.5Z" />
+          </svg>
+        </span>
         <span className="status-icon signal" title="Signal">
           <span /><span /><span /><span />
-        </span>
-        <span className="status-icon wifi" title="Wi-Fi">
-          <svg width="16" height="12" viewBox="0 0 16 12" fill="none" aria-hidden="true">
-            <path d="M8 10.5c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1Z" fill="currentColor" />
-            <path d="M5 7.5c1.66-1.66 4.34-1.66 6 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-            <path d="M2.5 5c2.76-2.76 7.24-2.76 10 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-            <path d="M0 2c3.59-3.59 9.41-3.59 13 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-          </svg>
         </span>
         <span className="status-icon battery" title="Battery">
           <svg width="22" height="11" viewBox="0 0 22 11" fill="none" aria-hidden="true">
@@ -35,29 +89,19 @@ function StatusBar() {
             <rect x="2" y="2" width="12" height="7" rx="1.2" fill="currentColor" />
           </svg>
         </span>
-        <span className="status-time">9:41</span>
       </div>
     </header>
   );
 }
 
-function AppIcon({ children }: { children: ReactNode }) {
-  return (
-    <div className="app-icon">
-      <svg viewBox="0 0 54 54" aria-hidden="true">
-        {children}
-      </svg>
-    </div>
-  );
-}
-
-export function PhoneDemo() {
+export function PhoneDemo({ demoMode = "apk" }: PhoneDemoProps) {
   const [view, setView] = useState<ViewName>("home");
   const [guideOpen, setGuideOpen] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [installStarted, setInstallStarted] = useState(false);
+  const [now, setNow] = useState(() => new Date());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const guideCopy =
@@ -79,8 +123,6 @@ export function PhoneDemo() {
     ) : (
       <>Tap <strong>Download APK</strong>, then wait for it to finish.</>
     );
-
-  const showArrow = guideOpen && view === "downloads" && !installStarted;
 
   const startDownload = useCallback(() => {
     if (downloading || downloaded) return;
@@ -106,22 +148,31 @@ export function PhoneDemo() {
     };
   }, []);
 
+  useEffect(() => {
+    const tick = () => setNow(new Date());
+    tick();
+    const intervalId = window.setInterval(tick, 60_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  const webTryActive = demoMode === "webTry";
+
   return (
     <motion.div
-      className="phone-wrap"
+      className={`phone-wrap${webTryActive ? "" : " phone-wrap--floating"}`}
+      id="try-demo"
       initial={{ opacity: 0, y: 28, rotate: 2 }}
       animate={{ opacity: 1, y: 0, rotate: 0 }}
       transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1], delay: 0.15 }}
     >
-      <motion.div
-        className="phone"
-        role="application"
-        aria-label="ShowNext phone demonstration"
-        animate={{ y: [0, -6, 0] }}
-        transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-      >
+      <div className="phone-float">
+        <div
+          className="phone"
+          role="application"
+          aria-label="ShowNext phone demonstration"
+        >
         <div className="power-btn" aria-hidden="true" />
-        <div className="screen-shell">
+        <div className={`screen-shell ${view === "downloads" ? "screen-shell--downloads" : ""}`}>
           <div className="camera-hole" aria-hidden="true" />
           <StatusBar />
 
@@ -139,63 +190,24 @@ export function PhoneDemo() {
                 >
                   <div className="home-main">
                     <div className="at-a-glance">
-                      <span className="date">Sat, Aug 29 · 72°F</span>
-                      <h1>Good afternoon</h1>
+                      <span className="date">{formatPhoneDate(now)}</span>
+                      <h1>{getTimeGreeting(now)}</h1>
                     </div>
                   </div>
 
                   <div className="home-bottom">
-                    <div className="app-grid">
-                      <button className="app downloads" type="button" onClick={() => setView("downloads")}>
-                        <AppIcon>
-                          <circle cx="27" cy="27" r="27" fill="#4285F4" />
-                          <path d="M27 16v14m0 0-5-5m5 5 5-5M18 34h18" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" />
-                        </AppIcon>
-                        <div className="app-label">Downloads</div>
+                    <div className="home-apps home-apps--top" aria-label="Apps">
+                      <button className="app downloads" type="button" aria-label="Downloads" onClick={() => setView("downloads")}>
+                        <AppIconImage name="downloads" />
                       </button>
-                      <button className="app store" type="button">
-                        <AppIcon>
-                          <circle cx="27" cy="27" r="27" fill="#fff" />
-                          <path d="M14 14l10 26 3-12 13-3L14 14z" fill="#4285F4" />
-                          <path d="M24 28l3 12 13-3-10-26-3 12z" fill="#34A853" />
-                          <path d="M14 14l10 26 3-12-13-3H14z" fill="#FBBC04" />
-                          <path d="M14 14h10l13 3-10 26-3-12L14 14z" fill="#EA4335" />
-                        </AppIcon>
-                        <div className="app-label">Play Store</div>
+                      <button className="app store" type="button" aria-label="Play Store">
+                        <AppIconImage name="play-store" />
                       </button>
-                      <button className="app messages" type="button">
-                        <AppIcon>
-                          <circle cx="27" cy="27" r="27" fill="#fff" />
-                          <path d="M14 18h26a3 3 0 013 3v11a3 3 0 01-3 3H22l-6 5v-5h-2a3 3 0 01-3-3V21a3 3 0 013-3z" fill="#1A73E8" />
-                        </AppIcon>
-                        <div className="app-label">Messages</div>
+                      <button className="app files" type="button" aria-label="Files">
+                        <AppIconImage name="files" />
                       </button>
-                      <button className="app photos" type="button">
-                        <AppIcon>
-                          <circle cx="27" cy="27" r="27" fill="#fff" />
-                          <path d="M27 14a13 13 0 100 26 13 13 0 000-26z" fill="#FBBC04" />
-                          <path d="M27 14a13 13 0 010 26V14z" fill="#EA4335" />
-                          <path d="M27 14a13 13 0 0113 13H27V14z" fill="#34A853" />
-                          <path d="M27 40a13 13 0 01-13-13h13v13z" fill="#4285F4" />
-                        </AppIcon>
-                        <div className="app-label">Photos</div>
-                      </button>
-                      <button className="app files" type="button">
-                        <AppIcon>
-                          <circle cx="27" cy="27" r="27" fill="#fff" />
-                          <path d="M17 16h14l4 4v18a3 3 0 01-3 3H17a3 3 0 01-3-3V19a3 3 0 013-3z" fill="#5F6368" />
-                          <path d="M31 16v4h4" stroke="#fff" strokeWidth="1.5" />
-                          <path d="M20 26h14M20 31h14" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-                        </AppIcon>
-                        <div className="app-label">Files</div>
-                      </button>
-                      <button className="app settings" type="button">
-                        <AppIcon>
-                          <circle cx="27" cy="27" r="27" fill="#fff" />
-                          <path d="M27 21a6 6 0 100 12 6 6 0 000-12z" fill="#5F6368" />
-                          <path d="M34 27h3M17 27h3M27 17v3M27 34v3M31.2 19.8l2.1-2.1M20.7 30.3l2.1-2.1M31.2 34.2l2.1 2.1M20.7 23.7l2.1 2.1" stroke="#5F6368" strokeWidth="2" strokeLinecap="round" />
-                        </AppIcon>
-                        <div className="app-label">Settings</div>
+                      <button className="app settings" type="button" aria-label="Settings">
+                        <AppIconImage name="settings" />
                       </button>
                     </div>
 
@@ -209,34 +221,18 @@ export function PhoneDemo() {
                       Search apps, web, and more
                     </div>
 
-                    <div className="dock" aria-label="Dock">
-                      <button className="app phone-app" type="button" aria-label="Phone">
-                        <AppIcon>
-                          <circle cx="27" cy="27" r="27" fill="#34A853" />
-                          <path d="M22 18l3 5-2.5 2a10 10 0 004.5 4.5l2-2.5 5 3c.5.3 1.1.2 1.4-.3 1-1.4 2.4-3.2 2.4-5.4 0-4.4-3.6-8-8-8-2.2 0-4 1.4-5.4 2.4-.5.3-.6.9-.3 1.4z" fill="#fff" />
-                        </AppIcon>
+                    <div className="home-apps home-apps--bottom" aria-label="Dock">
+                      <button className="app phone-app" type="button" aria-label="Contact">
+                        <AppIconImage name="phone" />
                       </button>
                       <button className="app dock-messages" type="button" aria-label="Messages">
-                        <AppIcon>
-                          <circle cx="27" cy="27" r="27" fill="#fff" />
-                          <path d="M14 18h26a3 3 0 013 3v11a3 3 0 01-3 3H22l-6 5v-5h-2a3 3 0 01-3-3V21a3 3 0 013-3z" fill="#1A73E8" />
-                        </AppIcon>
+                        <AppIconImage name="messages" />
+                      </button>
+                      <button className="app photos" type="button" aria-label="Photos">
+                        <AppIconImage name="photos" />
                       </button>
                       <button className="app camera-app" type="button" aria-label="Camera">
-                        <AppIcon>
-                          <circle cx="27" cy="27" r="27" fill="#747775" />
-                          <path d="M18 21l2.5-3.5h13L36 21h2a3 3 0 013 3v12a3 3 0 01-3 3H16a3 3 0 01-3-3V24a3 3 0 013-3h2z" fill="#fff" />
-                          <circle cx="27" cy="29" r="5.5" fill="#747775" stroke="#fff" strokeWidth="2" />
-                        </AppIcon>
-                      </button>
-                      <button className="app gallery-app" type="button" aria-label="Gallery">
-                        <AppIcon>
-                          <circle cx="27" cy="27" r="27" fill="#fff" />
-                          <path d="M27 14a13 13 0 100 26 13 13 0 000-26z" fill="#FBBC04" />
-                          <path d="M27 14a13 13 0 010 26V14z" fill="#EA4335" />
-                          <path d="M27 14a13 13 0 0113 13H27V14z" fill="#34A853" />
-                          <path d="M27 40a13 13 0 01-13-13h13v13z" fill="#4285F4" />
-                        </AppIcon>
+                        <AppIconImage name="camera" />
                       </button>
                     </div>
                   </div>
@@ -292,39 +288,23 @@ export function PhoneDemo() {
               )}
             </AnimatePresence>
 
-            <motion.button
-              className={`shownext-bubble ${view === "downloads" ? "shownext-bubble--downloads" : ""}`}
-              type="button"
-              aria-label="Open ShowNext help"
-              title="ShowNext"
-              onClick={() => setGuideOpen((open) => !open)}
-              animate={guideOpen ? { scale: 1.08 } : { scale: [1, 1.06, 1] }}
-              transition={guideOpen ? { duration: 0.2 } : { duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-              whileTap={{ scale: 0.94 }}
-            >
-              ✦
-            </motion.button>
+            {!webTryActive && (
+              <motion.button
+                className={`shownext-bubble ${view === "downloads" ? "shownext-bubble--downloads" : ""}`}
+                type="button"
+                aria-label="Open ShowNext help"
+                title="ShowNext"
+                onClick={() => setGuideOpen((open) => !open)}
+                animate={guideOpen ? { scale: 1.08 } : { scale: [1, 1.06, 1] }}
+                transition={guideOpen ? { duration: 0.2 } : { duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+                whileTap={{ scale: 0.94 }}
+              >
+                <LogoMark className="shownext-bubble__icon" size={52} />
+              </motion.button>
+            )}
 
             <AnimatePresence>
-              {showArrow && (
-                <motion.svg
-                  className="guide-arrow visible"
-                  viewBox="0 0 64 42"
-                  aria-hidden="true"
-                  initial={{ opacity: 0, pathLength: 0 }}
-                  animate={{ opacity: 1, pathLength: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.45, ease: "easeOut" }}
-                >
-                  <motion.path d="M6 6 C 22 6, 30 24, 48 34" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.45 }} />
-                  <path d="M48 34 L42 30" />
-                  <path d="M48 34 L44 40" />
-                </motion.svg>
-              )}
-            </AnimatePresence>
-
-            <AnimatePresence>
-              {guideOpen && (
+              {!webTryActive && guideOpen && (
                 <motion.div
                   className={`guide-panel open ${view === "downloads" ? "guide-panel--downloads" : ""}`}
                   role="dialog"
@@ -335,7 +315,7 @@ export function PhoneDemo() {
                   exit={{ opacity: 0, y: 12, scale: 0.98 }}
                   transition={{ duration: 0.24, ease: "easeOut" }}
                 >
-                  <span className="guide-label">ShowNext</span>
+                  <GuideLabel />
                   <h3 id="guideTitle">Need help installing the app?</h3>
                   <p>{guideCopy}</p>
                   <div className="guide-step">{guideStep}</div>
@@ -348,7 +328,8 @@ export function PhoneDemo() {
             <span />
           </div>
         </div>
-      </motion.div>
+        </div>
+      </div>
     </motion.div>
   );
 }

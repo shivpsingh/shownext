@@ -1,4 +1,5 @@
 import { HeroSection } from "../components/HeroSection";
+import { LogoMark } from "../components/LogoMark";
 import { WaitlistForm } from "../components/WaitlistForm";
 
 const steps = [
@@ -35,9 +36,7 @@ export default function Home() {
 
       <section className="promise shell">
         <div className="promise-card">
-          <span className="promise-mark" aria-hidden="true">
-            ✦
-          </span>
+          <LogoMark className="promise-mark" size={56} />
           <p className="eyebrow">For the in-between moments</p>
           <h2>
             They get their next step.
@@ -63,9 +62,7 @@ export default function Home() {
       <footer className="footer shell">
         <div className="footer-top">
           <a className="wordmark" href="#top">
-            <span className="wordmark-mark" aria-hidden="true">
-              ›
-            </span>
+            <LogoMark className="wordmark-mark" size={24} />
             ShowNext
           </a>
           <span>Made for the people who help us find the next step.</span>

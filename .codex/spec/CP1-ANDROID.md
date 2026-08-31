@@ -22,6 +22,10 @@ CP1 demonstrates cross-app screen reading and highlighting. It is intentionally 
 - Exclude password and editable nodes, invisible nodes, unlabeled nodes, and empty bounds.
 - Store only the pause preference in `SharedPreferences`; never persist or log screen data.
 
+## Decision engine
+
+`ShowNextDecisionEngine.choose(goal, currentPackage, elements)` returns one `DecisionResult` with `elementId`, a short instruction, and confidence. It considers only supplied clickable and enabled elements, maps common intent synonyms such as “text bigger” to Settings’ Display control, and returns `elementId: null` below 0.75 confidence. Passwords, OTPs, payments, money transfers, account deletion, factory reset, and security-bypass goals always return the safe no-action result. `DecisionResult.toJson()` emits only the required JSON fields.
+
 ## Test checklist
 
 - `TargetNormalizerTest` passes.
