@@ -6,6 +6,25 @@ export default defineSchema({
     email: v.string(),
     createdAt: v.number(),
   }).index("by_email", ["email"]),
+
+  browserQuota: defineTable({
+    browserId: v.string(),
+    tryCount: v.number(),
+    updatedAt: v.number(),
+  }).index("by_browserId", ["browserId"]),
+
+  dailyAnalytics: defineTable({
+    dateKey: v.string(),
+    totalCount: v.number(),
+    updatedAt: v.number(),
+  }).index("by_dateKey", ["dateKey"]),
+
+  ipRateLimit: defineTable({
+    ipHash: v.string(),
+    windowStart: v.number(),
+    requestCount: v.number(),
+  }).index("by_ipHash", ["ipHash"]),
+
   tryQuota: defineTable({
     ipHash: v.string(),
     tryCount: v.number(),
