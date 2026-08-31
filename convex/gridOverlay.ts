@@ -2,22 +2,26 @@
 
 import sharp from "sharp";
 
-const GRID_COLS = 8;
-const GRID_ROWS = 12;
-const ROW_LETTERS = "ABCDEFGHIJKL";
+const GRID_COLS = 6;
+const GRID_ROWS = 10;
+const ROW_LETTERS = "ABCDEFGHIJ";
 const LINE_COLOR = "rgba(255,255,0,0.45)";
 const LABEL_BG = "rgba(0,0,0,0.55)";
 const LABEL_FG = "#fff";
+const TARGET_WIDTH = 1024;
 
 function escapeXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export async function overlayGrid(imageBuffer: Buffer): Promise<Buffer> {
-  const meta = await sharp(imageBuffer).metadata();
-  const w = meta.width ?? 1080;
-  const h = meta.height ?? 1920;
+async function resizeToTarget(imageBuffer: Buffer): Promise<Buffer> {
+  return sharp(imageBuffer)
+    .resize({ width: TARGET_WIDTH })
+    .jpeg({ quality: 85 })
+    .toBuffer();
+}
 
+function buildGridSvg(w: number, h: number): string {
   const cellW = w / GRID_COLS;
   const cellH = h / GRID_ROWS;
   const fontSize = Math.max(12, Math.round(Math.min(cellW, cellH) * 0.18));
@@ -50,11 +54,22 @@ export async function overlayGrid(imageBuffer: Buffer): Promise<Buffer> {
   }
 
   svg += "</svg>";
+  return svg;
+}
 
-  return sharp(imageBuffer)
+export async function prepareImages(imageBuffer: Buffer): Promise<{ clean: Buffer; gridded: Buffer }> {
+  const clean = await resizeToTarget(imageBuffer);
+  const meta = await sharp(clean).metadata();
+  const w = meta.width ?? TARGET_WIDTH;
+  const h = meta.height ?? TARGET_WIDTH;
+
+  const svg = buildGridSvg(w, h);
+  const gridded = await sharp(clean)
     .composite([{ input: Buffer.from(svg), top: 0, left: 0 }])
     .jpeg({ quality: 80 })
     .toBuffer();
+
+  return { clean, gridded };
 }
 
 export function cellToBox(
@@ -71,10 +86,17 @@ export function cellToBox(
   if (!Number.isFinite(colNum) || colNum < 1 || colNum > GRID_COLS) return null;
 
   const colIndex = colNum - 1;
+  const cellW = 1 / GRID_COLS;
+  const cellH = 1 / GRID_ROWS;
+  const shrink = 0.6;
+  const ringW = cellW * shrink;
+  const ringH = cellH * shrink;
+  const centerX = colIndex * cellW + cellW / 2;
+  const centerY = rowIndex * cellH + cellH / 2;
   return {
-    x: colIndex / GRID_COLS,
-    y: rowIndex / GRID_ROWS,
-    width: 1 / GRID_COLS,
-    height: 1 / GRID_ROWS,
+    x: centerX - ringW / 2,
+    y: centerY - ringH / 2,
+    width: ringW,
+    height: ringH,
   };
 }

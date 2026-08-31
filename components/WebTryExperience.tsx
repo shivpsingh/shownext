@@ -589,16 +589,27 @@ export function WebTryExperience({
               ) : null}
             </div>
 
-            {showPreview && (
-              <div className="web-try-page__actions">
-                <button className="web-try-page__control web-try-page__primary" type="button" onClick={onAnalyze}>
-                  Analyze
+            <div className="web-try-page__actions">
+              {showPreview ? (
+                <>
+                  <button className="web-try-page__control web-try-page__primary" type="button" onClick={onAnalyze}>
+                    Analyze
+                  </button>
+                  <button className="web-try-page__control web-try-page__secondary" type="button" onClick={onRetake}>
+                    Retake
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="web-try-page__control web-try-page__primary"
+                  type="button"
+                  onClick={onAnalyze}
+                  disabled={!userContext.trim()}
+                >
+                  Go
                 </button>
-                <button className="web-try-page__control web-try-page__secondary" type="button" onClick={onRetake}>
-                  Retake
-                </button>
-              </div>
-            )}
+              )}
+            </div>
 
             <input
               ref={fileInputRef}
