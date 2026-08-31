@@ -535,10 +535,6 @@ export function WebTryExperience({
               )}
             </div>
 
-            <p className="web-try-page__demo-note">
-              In the Android app, ShowNext captures the screen automatically — no photo needed.
-            </p>
-
             <div className="web-try-page__context">
               <div className="web-try-context-field">
                 <textarea
