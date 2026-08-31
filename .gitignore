@@ -6,3 +6,5 @@ node_modules/
 .env*
 !.env.example
 tsconfig.tsbuildinfo
+scripts/__pycache__/
+show-next-icon.png

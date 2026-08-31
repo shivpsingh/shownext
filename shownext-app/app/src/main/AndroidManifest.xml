@@ -1,14 +1,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:allowBackup="false" android:label="ShowNext" android:supportsRtl="true" android:theme="@style/Theme.ShowNext">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <application android:allowBackup="false" android:icon="@drawable/show_next_icon" android:label="ShowNext" android:roundIcon="@drawable/show_next_icon" android:supportsRtl="true" android:theme="@style/Theme.ShowNext">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
         </activity>
-        <service android:name=".ShowNextAccessibilityService" android:exported="true" android:label="ShowNext assistant" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
-            <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility_service_config" />
+        <service android:name=".BubbleService" android:exported="false" android:foregroundServiceType="specialUse|mediaProjection">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="ShowNext floating helper bubble" />
         </service>
     </application>
 </manifest>

@@ -1,12 +1,24 @@
 <resources>
     <string name="app_name">ShowNext</string>
-    <string name="setup_title">A little help, right on the screen</string>
-    <string name="setup_body">ShowNext needs Accessibility access to see the controls on the screen and point out the next step. It does not save or send your screen.</string>
-    <string name="open_accessibility_settings">Open Accessibility Settings</string>
-    <string name="service_enabled">ShowNext is ready</string>
-    <string name="service_disabled">ShowNext is not enabled yet</string>
-    <string name="pause_assistant">Pause assistant</string>
-    <string name="resume_assistant">Resume assistant</string>
-    <string name="paused_message">The helper is paused. Resume it when you want help again.</string>
-    <string name="accessibility_service_description">ShowNext reads visible controls so it can highlight the next step.</string>
+    <string name="screenshot_title">Show me the screen you’re stuck on</string>
+    <string name="share_screenshot_prompt">Take a screenshot, tap Share, then choose ShowNext.</string>
+    <string name="shared_screenshot_received">Screenshot received.</string>
+    <string name="shared_image_unavailable">ShowNext could not open that image. Please share the screenshot again.</string>
+    <string name="shared_screenshot_description">The screenshot you shared</string>
+    <string name="bubble_title">ShowNext is ready when you are stuck</string>
+    <string name="bubble_active">Bubble active</string>
+    <string name="bubble_inactive">Bubble inactive</string>
+    <string name="start_shownext">Start ShowNext</string>
+    <string name="stop_shownext">Stop ShowNext</string>
+    <string name="bubble_notification_title">ShowNext is ready</string>
+    <string name="bubble_notification_text">Tap the bubble when you need help.</string>
+    <string name="screen_capture_permission_granted">Screen capture permission granted.</string>
+    <string name="screen_capture_permission_denied">Screen capture permission was not granted.</string>
+    <string name="captured_screen_received">One screen captured for verification.</string>
+    <string name="captured_screen_unavailable">ShowNext could not display the captured screen.</string>
+    <string name="captured_screen_description">The current screen captured by ShowNext</string>
+    <string name="analysis_loading">Finding the next step…</string>
+    <string name="analysis_result">Next step: %1$s\n%2$s</string>
+    <string name="analysis_error">I couldn’t analyze this screen. Please try again.</string>
+    <string name="safety_warning">This screen may involve a sensitive action. Check the details carefully before continuing.</string>
 </resources>
