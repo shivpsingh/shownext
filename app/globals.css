@@ -94,7 +94,8 @@ a {
   position: relative;
   min-height: 100vh;
   padding: 48px 0 48px;
-  overflow: visible;
+  overflow-x: clip;
+  overflow-y: visible;
 }
 
 .hero-stage::before {
@@ -1691,7 +1692,7 @@ body.web-try-active {
 }
 
 .web-try-result-instruction {
-  margin: 16px 0 0;
+  margin: 0 0 16px;
   font-family: var(--body);
   font-size: 1.05rem;
   line-height: 1.45;
@@ -1985,6 +1986,9 @@ p {
 
 .footer-bottom a {
   font-weight: 500;
+  display: inline-block;
+  padding-block: 14px;
+  margin-block: -14px;
 }
 
 .disclaimer {
@@ -2121,6 +2125,13 @@ p {
 
   .web-try-page__photo {
     position: static;
+  }
+}
+
+@media (max-width: 640px) {
+  .web-try-page__body--split {
+    display: flex;
+    flex-direction: column-reverse;
   }
 }
 
