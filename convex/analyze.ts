@@ -5,16 +5,53 @@ import { action } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 
 const PROMPT =
-  "You are ShowNext, an assistant for non-technical Android users. Analyze the screenshot and return exactly one safe next action using only visible information. Do not invent controls or provide multiple steps. If uncertain, ask one short clarification question. Do not recommend approving payments, entering OTPs, passwords, PINs, deleting accounts, factory resets, bypassing security warnings, installing unknown APKs, or suspicious permissions. Return valid JSON only with screenSummary, nextStep, location, confidence, needsClarification, and warning.";
+  "You are ShowNext, an assistant for non-technical Android users. Analyze the screenshot and return exactly one safe next action using only visible information. Do not invent controls or provide multiple steps. If uncertain, ask one short clarification question. Do not recommend approving payments, entering OTPs, passwords, PINs, deleting accounts, factory resets, bypassing security warnings, installing unknown APKs, or suspicious permissions. Return valid JSON only with screenSummary, nextStep, targetBox, confidence, needsClarification, and warning. nextStep must be one plain sentence telling the user what to tap (for example: \"Tap Continue at the bottom of the screen.\"). Do not include location hints or phrases like \"Look main screen\" in nextStep. targetBox must be an object {x, y, width, height} with normalized coordinates from 0 to 1 relative to the screenshot, bounding the control named in nextStep. If you cannot confidently locate that control, set targetBox to null — never guess.";
+
+type TargetBox = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
 
 type AnalysisResult = {
   screenSummary: string;
   nextStep: string;
-  location?: string;
+  targetBox: TargetBox | null;
   confidence: number;
   needsClarification: boolean;
   warning?: string;
 };
+
+function parseTargetBox(raw: unknown): TargetBox | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw !== "object") return null;
+
+  const box = raw as Record<string, unknown>;
+  const x = box.x;
+  const y = box.y;
+  const width = box.width;
+  const height = box.height;
+
+  if (
+    typeof x !== "number" ||
+    typeof y !== "number" ||
+    typeof width !== "number" ||
+    typeof height !== "number"
+  ) {
+    return null;
+  }
+
+  if ([x, y, width, height].some((value) => value < 0 || value > 1)) {
+    return null;
+  }
+
+  if (width <= 0 || height <= 0) {
+    return null;
+  }
+
+  return { x, y, width, height };
+}
 
 function parseAnalysis(raw: unknown): AnalysisResult {
   if (!raw || typeof raw !== "object") {
@@ -34,13 +71,15 @@ function parseAnalysis(raw: unknown): AnalysisResult {
     throw new Error("Analyzer response is missing required fields.");
   }
 
-  const location = typeof record.location === "string" && record.location.trim() && record.location !== "null" ? record.location : undefined;
-  const warning = typeof record.warning === "string" && record.warning.trim() && record.warning !== "null" ? record.warning : undefined;
+  const warning =
+    typeof record.warning === "string" && record.warning.trim() && record.warning !== "null"
+      ? record.warning
+      : undefined;
 
   return {
     screenSummary,
     nextStep,
-    location,
+    targetBox: parseTargetBox(record.targetBox),
     confidence: typeof record.confidence === "number" ? record.confidence : 0,
     needsClarification: Boolean(record.needsClarification),
     warning,

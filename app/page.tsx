@@ -11,6 +11,13 @@ const steps = [
 export default function Home() {
   return (
     <main>
+      <nav className="hero-nav shell" aria-label="Site">
+        <a className="wordmark" href="#top">
+          <LogoMark className="wordmark-mark" size={24} />
+          ShowNext
+        </a>
+      </nav>
+
       <HeroSection />
 
       <section className="story shell" id="how-it-works">

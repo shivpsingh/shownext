@@ -91,6 +91,41 @@ async function blobFromCanvas(canvas: HTMLCanvasElement, quality = 0.85): Promis
   });
 }
 
+const ANALYZING_STATUS_LINES = [
+  "Reading the screen",
+  "Finding the buttons",
+  "Working out the next tap",
+] as const;
+
+const STATUS_ROTATION_MS = 2500;
+const LONG_WAIT_MS = 45000;
+
+function ResultScreenshot({
+  previewUrl,
+  targetBox,
+}: {
+  previewUrl: string;
+  targetBox: ScreenAnalysis["targetBox"];
+}) {
+  return (
+    <div className="web-try-result-image">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={previewUrl} alt="Captured screen" />
+      {targetBox ? (
+        <div
+          className="web-try-target-ring"
+          style={{
+            left: `${targetBox.x * 100}%`,
+            top: `${targetBox.y * 100}%`,
+            width: `${targetBox.width * 100}%`,
+            height: `${targetBox.height * 100}%`,
+          }}
+          aria-hidden="true"
+        />
+      ) : null}
+    </div>
+  );
+}
 const FULL_PAGE_PHASES: WebTryPhase[] = [
   "camera",
   "preview",
@@ -127,6 +162,8 @@ export function WebTryExperience({
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [speechError, setSpeechError] = useState<string | null>(null);
+  const [analyzingStatusIndex, setAnalyzingStatusIndex] = useState(0);
+  const [analyzingLongWait, setAnalyzingLongWait] = useState(false);
 
   onUserContextChangeRef.current = onUserContextChange;
 
@@ -162,6 +199,27 @@ export function WebTryExperience({
       setStartingCamera(false);
     }
   }, [stopStream]);
+
+  useEffect(() => {
+    if (phase !== "analyzing") {
+      setAnalyzingStatusIndex(0);
+      setAnalyzingLongWait(false);
+      return;
+    }
+
+    const rotationId = window.setInterval(() => {
+      setAnalyzingStatusIndex((index) => (index + 1) % ANALYZING_STATUS_LINES.length);
+    }, STATUS_ROTATION_MS);
+
+    const longWaitId = window.setTimeout(() => {
+      setAnalyzingLongWait(true);
+    }, LONG_WAIT_MS);
+
+    return () => {
+      window.clearInterval(rotationId);
+      window.clearTimeout(longWaitId);
+    };
+  }, [phase]);
 
   useEffect(() => {
     if (phase !== "camera") {
@@ -299,7 +357,8 @@ export function WebTryExperience({
 
   if (!FULL_PAGE_PHASES.includes(phase)) return null;
 
-  const splitView = ["uploading", "analyzing", "result", "clarification", "error"].includes(phase);
+  const splitView = ["uploading", "analyzing", "clarification", "error"].includes(phase);
+  const resultView = phase === "result" && previewUrl && analysis;
   const showPreview = phase === "preview" && previewUrl;
 
   return (
@@ -323,8 +382,21 @@ export function WebTryExperience({
         </button>
       </header>
 
-      <div className={`web-try-page__body shell ${splitView ? "web-try-page__body--split" : ""}`}>
-        {splitView && previewUrl ? (
+      <div
+        className={`web-try-page__body shell ${splitView ? "web-try-page__body--split" : ""} ${resultView ? "web-try-page__body--result" : ""}`}
+      >
+        {resultView ? (
+          <motion.div
+            className="web-try-page__result-full"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <ResultScreenshot previewUrl={previewUrl} targetBox={analysis.targetBox} />
+            {analysis.warning ? <p className="web-try-page__warning">{analysis.warning}</p> : null}
+            <p className="web-try-result-instruction">{analysis.nextStep}</p>
+          </motion.div>
+        ) : splitView && previewUrl ? (
           <>
             <motion.div
               className="web-try-page__photo"
@@ -353,20 +425,13 @@ export function WebTryExperience({
                 <>
                   <p className="web-try-page__eyebrow">Analyzing</p>
                   <h2>Finding the next tap…</h2>
-                  <p className="web-try-page__lede">Looking at what is visible on the screen.</p>
+                  <p className="web-try-page__timing">Usually takes 10 to 30 seconds</p>
+                  <p className="web-try-page__status" role="status" aria-live="polite">
+                    {analyzingLongWait
+                      ? "Still working, one moment"
+                      : ANALYZING_STATUS_LINES[analyzingStatusIndex]}
+                  </p>
                   <div className="web-try-spinner" aria-hidden="true" />
-                </>
-              )}
-
-              {phase === "result" && analysis && (
-                <>
-                  <p className="web-try-page__eyebrow">Your next step</p>
-                  <h2>{analysis.screenSummary}</h2>
-                  {analysis.warning && <p className="web-try-page__warning">{analysis.warning}</p>}
-                  <div className="web-try-page__step">
-                    {analysis.nextStep}
-                    {analysis.location ? <> Look {analysis.location}.</> : null}
-                  </div>
                 </>
               )}
 
@@ -412,6 +477,11 @@ export function WebTryExperience({
               </p>
             </div>
 
+            <p className="web-try-page__demo-note">
+              Upload a screenshot to test the guidance. The Android app will capture the parent&apos;s screen when
+              they tap the bubble.
+            </p>
+
             {cameraError && <p className="web-try-page__error">{cameraError}</p>}
 
             <div className="web-try-page__frame">
@@ -441,17 +511,17 @@ export function WebTryExperience({
                   <button
                     className="web-try-page__control web-try-page__primary"
                     type="button"
-                    onClick={() => void takePhoto()}
-                    disabled={startingCamera || Boolean(cameraError)}
+                    onClick={() => fileInputRef.current?.click()}
                   >
-                    Take photo
+                    Upload screenshot
                   </button>
                   <button
                     className="web-try-page__control web-try-page__secondary"
                     type="button"
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => void takePhoto()}
+                    disabled={startingCamera || Boolean(cameraError)}
                   >
-                    Upload photo instead
+                    Take photo with camera
                   </button>
                 </>
               )}
@@ -522,7 +592,6 @@ export function WebTryExperience({
               className="sr-only"
               type="file"
               accept="image/*"
-              capture="environment"
               onChange={(event) => void handleFileChange(event)}
             />
           </div>
