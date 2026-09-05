@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { getBrowserId } from "./browserId";
 import { getConvexSiteUrl } from "./convexSite";
 
 export const TRY_LIMIT_REACHED = "TRY_LIMIT_REACHED";
@@ -9,6 +10,8 @@ export const IP_RATE_LIMITED = "IP_RATE_LIMITED";
 
 export type QuotaReason = "browser_limit" | "daily_capacity" | "ip_rate_limited" | null;
 
+export type QuotaStatus = "loading" | "ready" | "unavailable";
+
 export type TryQuota = {
   remaining: number;
   limit: number;
@@ -16,30 +19,26 @@ export type TryQuota = {
   reason: QuotaReason;
 };
 
-const STORAGE_KEY = "shownext_browser_id";
+export type TryQuotaState = TryQuota & { status: QuotaStatus };
 
-function getBrowserId(): string {
-  if (typeof window === "undefined") return "";
-  let id = localStorage.getItem(STORAGE_KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(STORAGE_KEY, id);
-  }
-  return id;
-}
-
-const DEFAULT_QUOTA: TryQuota = { remaining: 5, limit: 5, used: 0, reason: null };
+// Never assume an allowance the backend has not confirmed.
+const UNKNOWN_QUOTA: TryQuotaState = {
+  remaining: 0,
+  limit: 0,
+  used: 0,
+  reason: null,
+  status: "unavailable",
+};
 
 export function useWebTryQuota() {
-  const [quota, setQuota] = useState<TryQuota>(DEFAULT_QUOTA);
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState<TryQuotaState>({ ...UNKNOWN_QUOTA, status: "loading" });
 
-  const refresh = useCallback(async (): Promise<TryQuota> => {
+  const refresh = useCallback(async (): Promise<TryQuotaState> => {
     const siteUrl = getConvexSiteUrl();
     const browserId = getBrowserId();
     if (!siteUrl || !browserId) {
-      setQuota(DEFAULT_QUOTA);
-      return DEFAULT_QUOTA;
+      setState(UNKNOWN_QUOTA);
+      return UNKNOWN_QUOTA;
     }
 
     try {
@@ -47,15 +46,16 @@ export function useWebTryQuota() {
         `${siteUrl}/web-try/quota?browserId=${encodeURIComponent(browserId)}`,
       );
       if (!response.ok) {
-        setQuota(DEFAULT_QUOTA);
-        return DEFAULT_QUOTA;
+        setState(UNKNOWN_QUOTA);
+        return UNKNOWN_QUOTA;
       }
       const data = (await response.json()) as TryQuota;
-      setQuota(data);
-      return data;
+      const next: TryQuotaState = { ...data, status: "ready" };
+      setState(next);
+      return next;
     } catch {
-      setQuota(DEFAULT_QUOTA);
-      return DEFAULT_QUOTA;
+      setState(UNKNOWN_QUOTA);
+      return UNKNOWN_QUOTA;
     }
   }, []);
 
@@ -86,8 +86,8 @@ export function useWebTryQuota() {
   }, []);
 
   useEffect(() => {
-    void refresh().finally(() => setLoading(false));
+    void refresh();
   }, [refresh]);
 
-  return { ...quota, loading, refresh, consumeTry };
+  return { ...state, refresh, consumeTry };
 }

@@ -9,6 +9,8 @@
  */
 
 import type * as analyze from "../analyze.js";
+import type * as crons from "../crons.js";
+import type * as feedback from "../feedback.js";
 import type * as gridOverlay from "../gridOverlay.js";
 import type * as http from "../http.js";
 import type * as imagePrep from "../imagePrep.js";
@@ -23,6 +25,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   analyze: typeof analyze;
+  crons: typeof crons;
+  feedback: typeof feedback;
   gridOverlay: typeof gridOverlay;
   http: typeof http;
   imagePrep: typeof imagePrep;

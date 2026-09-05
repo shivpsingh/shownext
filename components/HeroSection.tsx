@@ -5,17 +5,29 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Id } from "../convex/_generated/dataModel";
 import { useAnalyzeScreen } from "../lib/useAnalyzeScreen";
 import { scrollToWaitlist } from "../lib/scrollToWaitlist";
+import { isUnsafeGoal, sensitiveActionResult } from "../lib/sensitiveAction";
 import {
   TRY_LIMIT_REACHED,
   DAILY_CAPACITY_REACHED,
   IP_RATE_LIMITED,
   useWebTryQuota,
 } from "../lib/useWebTryQuota";
-import type { DemoMode, ScreenAnalysis, WebTryPhase } from "../lib/webTry";
+import { api } from "../convex/_generated/api";
+import { useMutation } from "convex/react";
+import { getBrowserId } from "../lib/browserId";
+import {
+  getDeviceType,
+  type DemoMode,
+  type ScreenAnalysis,
+  type StepFeedbackPayload,
+  type WebTryPhase,
+} from "../lib/webTry";
 import { PhoneDemo } from "./PhoneDemo";
-import { WebTryExperience } from "./WebTryExperience";
+import { WebTryExperience, type WebTryErrorVariant } from "./WebTryExperience";
 
 const fadeEase = [0.22, 1, 0.36, 1] as const;
+
+const CAPTURE_TYPE = "screenshot";
 
 type HeroSectionViewProps = {
   demoMode: DemoMode;
@@ -28,6 +40,8 @@ type HeroSectionViewProps = {
   onClarificationInputChange: (value: string) => void;
   onUserContextChange: (value: string) => void;
   onClarificationSubmit: () => void;
+  feedbackSubmitted: boolean;
+  onFeedbackSubmit: (payload: StepFeedbackPayload) => void;
   onStartWebTry: () => void;
   onExitWebTry: () => void;
   onPhotoReady: (blob: Blob) => void;
@@ -35,7 +49,8 @@ type HeroSectionViewProps = {
   onAnalyze: () => void;
   tryRemaining?: number;
   tryLimit?: number;
-  limitExhausted?: boolean;
+  quotaReady?: boolean;
+  errorVariant?: WebTryErrorVariant;
   onJoinWaitlist?: () => void;
 };
 
@@ -50,6 +65,8 @@ function HeroSectionView({
   onClarificationInputChange,
   onUserContextChange,
   onClarificationSubmit,
+  feedbackSubmitted,
+  onFeedbackSubmit,
   onStartWebTry,
   onExitWebTry,
   onPhotoReady,
@@ -57,12 +74,13 @@ function HeroSectionView({
   onAnalyze,
   tryRemaining,
   tryLimit,
-  limitExhausted,
+  quotaReady = false,
+  errorVariant = "generic",
   onJoinWaitlist,
 }: HeroSectionViewProps) {
   const webTryActive = demoMode === "webTry";
   const showFullPage = webTryActive && webTryPhase !== "idle";
-  const atTryLimit = tryRemaining === 0;
+  const atTryLimit = quotaReady && tryRemaining === 0;
   const ctaLabel = atTryLimit ? "Join the waitlist" : "Try now";
 
   return (
@@ -101,7 +119,7 @@ function HeroSectionView({
               >
                 {ctaLabel}
               </motion.button>
-              {tryRemaining !== undefined && tryLimit !== undefined && tryRemaining > 0 ? (
+              {quotaReady && tryRemaining !== undefined && tryLimit !== undefined && tryRemaining > 0 ? (
                 <motion.p
                   className="hero-note hero-try-quota"
                   initial={{ opacity: 0 }}
@@ -134,7 +152,7 @@ function HeroSectionView({
             errorMessage={errorMessage}
             clarificationInput={clarificationInput}
             userContext={userContext}
-            limitExhausted={limitExhausted}
+            errorVariant={errorVariant}
             onClose={onExitWebTry}
             onPhotoReady={onPhotoReady}
             onRetake={onRetake}
@@ -142,6 +160,8 @@ function HeroSectionView({
             onClarificationInputChange={onClarificationInputChange}
             onUserContextChange={onUserContextChange}
             onClarificationSubmit={onClarificationSubmit}
+            feedbackSubmitted={feedbackSubmitted}
+            onFeedbackSubmit={onFeedbackSubmit}
             onJoinWaitlist={onJoinWaitlist}
           />
         )}
@@ -156,6 +176,7 @@ function useWebTrySession() {
   const [analysis, setAnalysis] = useState<ScreenAnalysis | null>(null);
   const [storageId, setStorageId] = useState<Id<"_storage"> | null>(null);
   const [clarificationCount, setClarificationCount] = useState(0);
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [clarificationInput, setClarificationInput] = useState("");
   const [userContext, setUserContext] = useState("");
@@ -176,6 +197,7 @@ function useWebTrySession() {
     setAnalysis(null);
     setStorageId(null);
     setClarificationCount(0);
+    setFeedbackSubmitted(false);
     setErrorMessage(null);
     setClarificationInput("");
     setUserContext("");
@@ -196,6 +218,7 @@ function useWebTrySession() {
     setAnalysis(null);
     setStorageId(null);
     setClarificationCount(0);
+    setFeedbackSubmitted(false);
     setErrorMessage(null);
     setClarificationInput("");
     setUserContext("");
@@ -218,6 +241,7 @@ function useWebTrySession() {
   const handleRetake = useCallback(() => {
     clearPreview();
     setAnalysis(null);
+    setFeedbackSubmitted(false);
     setErrorMessage(null);
     setWebTryPhase("camera");
   }, [clearPreview]);
@@ -228,6 +252,7 @@ function useWebTrySession() {
     analysis,
     storageId,
     clarificationCount,
+    feedbackSubmitted,
     errorMessage,
     clarificationInput,
     userContext,
@@ -237,6 +262,7 @@ function useWebTrySession() {
     setAnalysis,
     setStorageId,
     setClarificationCount,
+    setFeedbackSubmitted,
     setErrorMessage,
     setClarificationInput,
     setUserContext,
@@ -267,6 +293,8 @@ function HeroSectionLocal() {
       onClarificationInputChange={session.setClarificationInput}
       onUserContextChange={session.setUserContext}
       onClarificationSubmit={() => undefined}
+      feedbackSubmitted={session.feedbackSubmitted}
+      onFeedbackSubmit={() => undefined}
       onStartWebTry={session.startWebTry}
       onExitWebTry={session.resetWebTry}
       onPhotoReady={session.handlePhotoReady}
@@ -278,42 +306,79 @@ function HeroSectionLocal() {
 
 function HeroSectionConnected() {
   const session = useWebTrySession();
-  const { uploadAndAnalyze, analyzeExisting, maxClarificationRounds } = useAnalyzeScreen();
-  const { remaining, limit, refresh } = useWebTryQuota();
-  const [limitExhausted, setLimitExhausted] = useState(false);
+  const { uploadAndAnalyze, analyzeExisting, discardUpload, maxClarificationRounds } =
+    useAnalyzeScreen();
+  const { remaining, limit, status: quotaStatus, refresh } = useWebTryQuota();
+  const submitFeedback = useMutation(api.feedback.submitFeedback);
+  const [errorVariant, setErrorVariant] = useState<WebTryErrorVariant>("generic");
+  // Discarding before an in-flight feedback write commits would delete a
+  // screenshot the visitor just consented to keep.
+  const feedbackPendingRef = useRef<Promise<unknown> | null>(null);
+
+  // Closing the demo deletes the screenshot, which is what the upload copy promises.
+  const handleExitWebTry = useCallback(() => {
+    const storageId = session.storageId;
+    const pending = feedbackPendingRef.current;
+    if (storageId) {
+      void (async () => {
+        if (pending) await pending.catch(() => undefined);
+        await discardUpload(storageId);
+      })();
+    }
+    feedbackPendingRef.current = null;
+    session.resetWebTry();
+  }, [discardUpload, session]);
 
   const handleJoinWaitlist = useCallback(() => {
-    session.resetWebTry();
+    handleExitWebTry();
     scrollToWaitlist();
-  }, [session]);
+  }, [handleExitWebTry]);
 
   const handleStartWebTry = useCallback(async () => {
-    try {
-      const quota = await refresh();
-      if (quota.remaining <= 0) {
-        scrollToWaitlist();
-        return;
-      }
-    } catch {
-      // If quota check fails, still allow trying — analyze will enforce server-side.
+    const quota = await refresh();
+
+    if (quota.status === "unavailable") {
+      setErrorVariant("unavailable");
+      session.startWebTry();
+      session.setErrorMessage(
+        "The demo is unavailable right now. Join the waitlist and I will send you access.",
+      );
+      session.setWebTryPhase("error");
+      return;
     }
-    setLimitExhausted(false);
+
+    if (quota.remaining <= 0) {
+      scrollToWaitlist();
+      return;
+    }
+
+    setErrorVariant("generic");
     session.startWebTry();
   }, [refresh, session]);
 
   const handleAnalyze = async () => {
     if (!session.previewBlob) return;
 
+    // Refuse before the screenshot leaves the device. Convex repeats the check,
+    // since this one can be bypassed.
+    if (isUnsafeGoal(session.userContext)) {
+      session.setAnalysis(sensitiveActionResult());
+      session.setErrorMessage(null);
+      session.setWebTryPhase("result");
+      return;
+    }
+
     session.setWebTryPhase("uploading");
     session.setErrorMessage(null);
-    setLimitExhausted(false);
+    session.setFeedbackSubmitted(false);
+    setErrorVariant("generic");
 
     try {
       session.setWebTryPhase("analyzing");
       const result = await uploadAndAnalyze(
         session.previewBlob,
         session.userContext.trim() || undefined,
-        "screenshot",
+        CAPTURE_TYPE,
       );
       session.setStorageId(result.storageId);
       session.setAnalysis(result.analysis);
@@ -326,7 +391,7 @@ function HeroSectionConnected() {
         message === DAILY_CAPACITY_REACHED ||
         message === IP_RATE_LIMITED
       ) {
-        setLimitExhausted(true);
+        setErrorVariant("limit");
         if (message === DAILY_CAPACITY_REACHED) {
           session.setErrorMessage(
             "Demo is at capacity for today. Join the waitlist and I will send you access.",
@@ -344,12 +409,54 @@ function HeroSectionConnected() {
     }
   };
 
+  const handleFeedbackSubmit = useCallback(
+    (payload: StepFeedbackPayload) => {
+      const { storageId, analysis } = session;
+      if (!storageId || !analysis) return;
+
+      // Optimistic: a failed write must never surface an error over a good answer.
+      session.setFeedbackSubmitted(true);
+
+      const goal = session.userContext.trim();
+      const promise = submitFeedback({
+        storageId,
+        browserId: getBrowserId(),
+        consent: payload.consent,
+        outcome: payload.outcome,
+        ...(payload.failureReason ? { failureReason: payload.failureReason } : {}),
+        ...(payload.userCorrection ? { userCorrection: payload.userCorrection } : {}),
+        ...(payload.consent && goal ? { userGoal: goal } : {}),
+        screenSummary: analysis.screenSummary,
+        label: analysis.label,
+        instruction: analysis.instruction,
+        ...(analysis.box ? { box: analysis.box } : {}),
+        confidence: analysis.confidence,
+        clarificationRound: session.clarificationCount,
+        deviceType: getDeviceType(),
+        captureType: CAPTURE_TYPE,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      }).catch(() => undefined);
+
+      feedbackPendingRef.current = promise;
+    },
+    [session, submitFeedback],
+  );
+
   const handleClarificationSubmit = async () => {
     if (!session.storageId || !session.clarificationInput.trim()) return;
     if (session.clarificationCount >= maxClarificationRounds) return;
 
+    if (isUnsafeGoal(session.clarificationInput)) {
+      session.setAnalysis(sensitiveActionResult());
+      session.setClarificationInput("");
+      session.setWebTryPhase("result");
+      return;
+    }
+
     session.setWebTryPhase("analyzing");
     session.setErrorMessage(null);
+    session.setFeedbackSubmitted(false);
 
     try {
       const result = await analyzeExisting(session.storageId, session.clarificationInput.trim());
@@ -377,14 +484,17 @@ function HeroSectionConnected() {
       onClarificationInputChange={session.setClarificationInput}
       onUserContextChange={session.setUserContext}
       onClarificationSubmit={() => void handleClarificationSubmit()}
+      feedbackSubmitted={session.feedbackSubmitted}
+      onFeedbackSubmit={handleFeedbackSubmit}
       onStartWebTry={() => void handleStartWebTry()}
-      onExitWebTry={session.resetWebTry}
+      onExitWebTry={handleExitWebTry}
       onPhotoReady={session.handlePhotoReady}
       onRetake={session.handleRetake}
       onAnalyze={() => void handleAnalyze()}
       tryRemaining={remaining}
       tryLimit={limit}
-      limitExhausted={limitExhausted}
+      quotaReady={quotaStatus === "ready"}
+      errorVariant={errorVariant}
       onJoinWaitlist={handleJoinWaitlist}
     />
   );

@@ -1,7 +1,8 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { scrollToWaitlist } from "../lib/scrollToWaitlist";
 import type { DemoMode } from "../lib/webTry";
 import { AppIconImage } from "./phoneAppIcons";
 import { LogoMark } from "./LogoMark";
@@ -97,56 +98,19 @@ function StatusBar() {
 export function PhoneDemo({ demoMode = "apk" }: PhoneDemoProps) {
   const [view, setView] = useState<ViewName>("home");
   const [guideOpen, setGuideOpen] = useState(false);
-  const [downloaded, setDownloaded] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [installStarted, setInstallStarted] = useState(false);
   const [now, setNow] = useState<Date | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const guideCopy =
     view === "home"
-      ? "Open Downloads to find the ShowNext APK."
-      : installStarted
-        ? "That's the small use case — help, right on the phone."
-        : downloaded
-          ? "You're almost there."
-          : "I'll point you to the next tap.";
+      ? "Open Downloads to see where ShowNext will live."
+      : "The app is still in development.";
 
   const guideStep =
     view === "home" ? (
       <>Tap the <strong>Downloads</strong> app on your home screen.</>
-    ) : installStarted ? (
-      <>Installation started. ShowNext will guide your parent on their next screen.</>
-    ) : downloaded ? (
-      <>Tap <strong>Open when ready</strong> to install ShowNext.</>
     ) : (
-      <>Tap <strong>Download APK</strong>, then wait for it to finish.</>
+      <>Tap <strong>Join waitlist</strong> to hear when the app is ready.</>
     );
-
-  const startDownload = useCallback(() => {
-    if (downloading || downloaded) return;
-    setDownloading(true);
-    setProgress(0);
-    timerRef.current = setInterval(() => {
-      setProgress((current) => {
-        const next = current + 8;
-        if (next >= 100) {
-          if (timerRef.current) clearInterval(timerRef.current);
-          setDownloading(false);
-          setDownloaded(true);
-          return 100;
-        }
-        return next;
-      });
-    }, 120);
-  }, [downloaded, downloading]);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
 
   useEffect(() => {
     const tick = () => setNow(new Date());
@@ -257,33 +221,14 @@ export function PhoneDemo({ demoMode = "apk" }: PhoneDemoProps) {
                     <div className="apk-icon">SN</div>
                     <div className="download-meta">
                       <h3>ShowNext.apk</h3>
-                      <p>Early Android build · 18.4 MB · Tap download, then open the file to install.</p>
+                      <p>The app is still in development. Join the waitlist to keep updated.</p>
                     </div>
                   </div>
                   <div className="download-actions">
-                    <button className="primary-btn" type="button" onClick={startDownload} disabled={downloading || downloaded}>
-                      Download APK
-                    </button>
-                    <button className="ghost-btn" type="button" disabled={!downloaded} onClick={() => setInstallStarted(true)}>
-                      Open when ready
+                    <button className="primary-btn" type="button" onClick={scrollToWaitlist}>
+                      Join waitlist
                     </button>
                   </div>
-                  <AnimatePresence>
-                    {(downloading || downloaded) && (
-                      <motion.div
-                        className="download-progress visible"
-                        aria-live="polite"
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 8 }}
-                      >
-                        {downloaded ? "ShowNext.apk downloaded. You can open it now." : "Downloading ShowNext.apk…"}
-                        <div className="progress-bar">
-                          <motion.span animate={{ width: `${progress}%` }} transition={{ duration: 0.12, ease: "linear" }} />
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
                 </motion.section>
               )}
             </AnimatePresence>

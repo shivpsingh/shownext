@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 
 export const TRY_LIMIT_REACHED = "TRY_LIMIT_REACHED";
 export const DAILY_CAPACITY_REACHED = "DAILY_CAPACITY_REACHED";
@@ -11,6 +12,8 @@ const MAX_ANALYSES_PER_DAY = 50;
 const IP_HOURLY_LIMIT = 20;
 const IP_WINDOW_MS = 60 * 60 * 1000;
 const NONCE_TTL_MS = 5 * 60 * 1000;
+const RETENTION_MS = 60 * 60 * 1000;
+const SWEEP_BATCH = 200;
 
 function todayKey(): string {
   return new Date().toISOString().slice(0, 10);
@@ -138,11 +141,13 @@ export const consumeTry = internalMutation({
       });
     }
 
-    // Issue nonce
+    // Issue nonce. browserId rides along so the session it creates has an owner
+    // that /web-try/discard can authorize against.
     const nonce = crypto.randomUUID();
     await ctx.db.insert("tryNonces", {
       nonce,
       ipHash: args.ipHash,
+      browserId: args.browserId,
       used: false,
       expiresAt: now + NONCE_TTL_MS,
     });
@@ -179,8 +184,80 @@ export const redeemNonce = internalMutation({
       await ctx.db.insert("trySessions", {
         storageId: args.storageId,
         ipHash: nonceRow.ipHash,
+        ...(nonceRow.browserId ? { browserId: nonceRow.browserId } : {}),
         createdAt: Date.now(),
       });
+    }
+  },
+});
+
+// True when the visitor consented to keep this screenshot as a learning record,
+// which exempts it from both deletion paths below.
+async function isImageRetained(
+  ctx: { db: MutationCtx["db"] },
+  storageId: Id<"_storage">,
+): Promise<boolean> {
+  const record = await ctx.db
+    .query("learningRecords")
+    .withIndex("by_storageId", (q) => q.eq("storageId", storageId))
+    .unique();
+  return record?.imageRetained === true;
+}
+
+// Deletes the uploaded screenshot once the visitor closes the demo. Only the
+// browser that created the session may delete it.
+export const discardSession = internalMutation({
+  args: { storageId: v.id("_storage"), browserId: v.string() },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("trySessions")
+      .withIndex("by_storageId", (q) => q.eq("storageId", args.storageId))
+      .unique();
+
+    if (!session || session.browserId !== args.browserId) return;
+
+    if (!(await isImageRetained(ctx, args.storageId))) {
+      await ctx.storage.delete(args.storageId);
+    }
+    await ctx.db.delete(session._id);
+  },
+});
+
+// Hourly cleanup. Sweeps storage as well as sessions: the client uploads before
+// calling /web-try/consume, so a failure in between leaves a blob with no
+// session row that a session-only sweep would never find.
+export const sweepExpiredSessions = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const cutoff = Date.now() - RETENTION_MS;
+
+    const staleSessions = await ctx.db
+      .query("trySessions")
+      .withIndex("by_createdAt", (q) => q.lt("createdAt", cutoff))
+      .take(SWEEP_BATCH);
+
+    for (const session of staleSessions) {
+      if (!(await isImageRetained(ctx, session.storageId))) {
+        await ctx.storage.delete(session.storageId);
+      }
+      await ctx.db.delete(session._id);
+    }
+
+    const oldFiles = await ctx.db.system.query("_storage").order("asc").take(SWEEP_BATCH);
+
+    for (const file of oldFiles) {
+      if (file._creationTime >= cutoff) break;
+
+      const session = await ctx.db
+        .query("trySessions")
+        .withIndex("by_storageId", (q) => q.eq("storageId", file._id))
+        .unique();
+
+      // The stale-session loop above already removed the session row for
+      // retained images, so the retention check has to be repeated here.
+      if (!session && !(await isImageRetained(ctx, file._id))) {
+        await ctx.storage.delete(file._id);
+      }
     }
   },
 });

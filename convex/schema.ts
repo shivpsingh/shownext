@@ -34,6 +34,8 @@ export default defineSchema({
   tryNonces: defineTable({
     nonce: v.string(),
     ipHash: v.string(),
+    // Optional for rows issued before discard authorization existed.
+    browserId: v.optional(v.string()),
     used: v.boolean(),
     expiresAt: v.number(),
   }).index("by_nonce", ["nonce"]),
@@ -41,6 +43,45 @@ export default defineSchema({
   trySessions: defineTable({
     storageId: v.id("_storage"),
     ipHash: v.string(),
+    // Optional for rows written before discard authorization existed.
+    browserId: v.optional(v.string()),
     createdAt: v.number(),
-  }).index("by_storageId", ["storageId"]),
+  })
+    .index("by_storageId", ["storageId"])
+    .index("by_createdAt", ["createdAt"]),
+
+  learningRecords: defineTable({
+    browserId: v.string(),
+    // Identity key for the answer this record grades. The blob it points at is
+    // kept only when imageRetained is true; otherwise it is deleted as usual and
+    // this becomes a dangling reference.
+    storageId: v.id("_storage"),
+    imageRetained: v.boolean(),
+    // The visitor's typed goal. Consent-gated, same as the image.
+    userGoal: v.optional(v.string()),
+    screenSummary: v.string(),
+    label: v.string(),
+    instruction: v.string(),
+    box: v.optional(
+      v.object({
+        x: v.number(),
+        y: v.number(),
+        width: v.number(),
+        height: v.number(),
+      }),
+    ),
+    confidence: v.number(),
+    clarificationRound: v.number(),
+    deviceType: v.string(),
+    captureType: v.optional(v.string()),
+    viewportWidth: v.optional(v.number()),
+    viewportHeight: v.optional(v.number()),
+    outcome: v.union(v.literal("worked"), v.literal("failed")),
+    failureReason: v.optional(v.string()),
+    userCorrection: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_storageId", ["storageId"])
+    .index("by_createdAt", ["createdAt"])
+    .index("by_outcome", ["outcome"]),
 });

@@ -22,16 +22,17 @@ Web try uses Convex for file upload and an OpenAI vision action.
 
 During development, keep `npx convex dev` running so backend functions stay synced.
 
-### Try quota (IP-based)
+### Try quota
 
-Web try limits each visitor to **Analyze** taps per IP (default **2**). Configure on the Convex deployment:
+Web try limits each browser to **5** Analyze taps, tracked by a browser id in `localStorage`. The limit is the `BROWSER_LIMIT` constant in `convex/tryQuota.ts`. A global daily ceiling and an hourly per-IP limit also apply. Set the IP hash salt on the Convex deployment:
 
 ```bash
-npx convex env set WEB_TRY_LIMIT 2 --prod
 npx convex env set IP_HASH_SALT "$(openssl rand -hex 32)" --prod
 ```
 
-When quota is exhausted, **Try now** scrolls to the waitlist. Clarifications on the same photo do not consume extra tries.
+When quota is exhausted, **Try now** scrolls to the waitlist. Clarifications on the same photo do not consume extra tries. If the quota endpoint cannot be reached, the demo does not open and no try count is shown.
+
+Uploaded screenshots are deleted when the visitor closes the demo, and an hourly job removes anything left behind within an hour.
 
 For production, set `NEXT_PUBLIC_CONVEX_URL` to your cloud Convex URL in Vercel (not `127.0.0.1`).
 
