@@ -2,9 +2,19 @@
 
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { resolveTargetRing, type ScreenAnalysis, type WebTryPhase } from "../lib/webTry";
+import {
+  resolveTargetRing,
+  type ScreenAnalysis,
+  type StepFeedbackPayload,
+  type WebTryPhase,
+} from "../lib/webTry";
+import { SENSITIVE_ACTION_WARNING } from "../lib/sensitiveAction";
+import { ACCEPT_ATTRIBUTE, validateUploadImage } from "../lib/validateUploadImage";
 import { LogoMark } from "./LogoMark";
 import { AIActionCard } from "./AIActionCard";
+import { StepFeedback } from "./StepFeedback";
+
+export type WebTryErrorVariant = "generic" | "limit" | "unavailable";
 
 type WebTryExperienceProps = {
   phase: WebTryPhase;
@@ -20,7 +30,9 @@ type WebTryExperienceProps = {
   onClarificationInputChange: (value: string) => void;
   onUserContextChange: (value: string) => void;
   onClarificationSubmit: () => void;
-  limitExhausted?: boolean;
+  feedbackSubmitted: boolean;
+  onFeedbackSubmit: (payload: StepFeedbackPayload) => void;
+  errorVariant?: WebTryErrorVariant;
   onJoinWaitlist?: () => void;
 };
 
@@ -103,6 +115,18 @@ const ANALYZING_STATUS_LINES = [
 const STATUS_ROTATION_MS = 2500;
 const LONG_WAIT_MS = 45000;
 
+const ERROR_EYEBROW: Record<WebTryErrorVariant, string> = {
+  generic: "Something went wrong",
+  limit: "Demo limit reached",
+  unavailable: "Demo unavailable",
+};
+
+const ERROR_HEADING: Record<WebTryErrorVariant, string> = {
+  generic: "Could not analyze that screen",
+  limit: "Join the waitlist for more",
+  unavailable: "Join the waitlist for access",
+};
+
 function ResultScreenshot({
   previewUrl,
   analysis,
@@ -154,7 +178,9 @@ export function WebTryExperience({
   onClarificationInputChange,
   onUserContextChange,
   onClarificationSubmit,
-  limitExhausted = false,
+  feedbackSubmitted,
+  onFeedbackSubmit,
+  errorVariant = "generic",
   onJoinWaitlist,
 }: WebTryExperienceProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -352,8 +378,10 @@ export function WebTryExperience({
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (file.size > 4 * 1024 * 1024) {
-      setCameraError("Choose a photo under 4 MB.");
+
+    const validation = await validateUploadImage(file);
+    if (!validation.ok) {
+      setCameraError(validation.message);
       return;
     }
 
@@ -365,7 +393,13 @@ export function WebTryExperience({
   if (!FULL_PAGE_PHASES.includes(phase)) return null;
 
   const splitView = ["uploading", "analyzing", "clarification", "error"].includes(phase);
+  // An error can arrive before any photo exists, so the panel renders alone then.
+  const panelView = splitView && (previewUrl || phase === "error");
+  const twoColumn = splitView && Boolean(previewUrl);
   const resultView = phase === "result" && previewUrl && analysis;
+  // A canned refusal carries no learning signal, and the goal behind it must
+  // never be persisted, so the prompt is withheld for those answers.
+  const showFeedback = Boolean(analysis) && analysis?.warning !== SENSITIVE_ACTION_WARNING;
   const showPreview = phase === "preview" && previewUrl;
 
   return (
@@ -390,7 +424,7 @@ export function WebTryExperience({
       </header>
 
       <div
-        className={`web-try-page__body shell ${splitView ? "web-try-page__body--split" : ""} ${resultView ? "web-try-page__body--result" : ""}`}
+        className={`web-try-page__body shell ${twoColumn ? "web-try-page__body--split" : ""} ${resultView ? "web-try-page__body--result" : ""}`}
       >
         {resultView ? (
           <motion.div
@@ -401,20 +435,25 @@ export function WebTryExperience({
           >
             <div className="web-try-result__card-slot">
               <AIActionCard analysis={analysis} />
+              {showFeedback ? (
+                <StepFeedback submitted={feedbackSubmitted} onSubmit={onFeedbackSubmit} />
+              ) : null}
             </div>
             <ResultScreenshot previewUrl={previewUrl} analysis={analysis} />
           </motion.div>
-        ) : splitView && previewUrl ? (
+        ) : panelView ? (
           <>
-            <motion.div
-              className="web-try-page__photo"
-              initial={{ opacity: 0, x: -24 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={previewUrl} alt="Captured screen" />
-            </motion.div>
+            {previewUrl ? (
+              <motion.div
+                className="web-try-page__photo"
+                initial={{ opacity: 0, x: -24 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={previewUrl} alt="Captured screen" />
+              </motion.div>
+            ) : null}
             <motion.div
               className="web-try-page__result"
               initial={{ opacity: 0, x: 24 }}
@@ -425,7 +464,9 @@ export function WebTryExperience({
                 <>
                   <p className="web-try-page__eyebrow">Uploading</p>
                   <h2>Sending your photo…</h2>
-                  <p className="web-try-page__lede">One-time analysis — nothing is saved after this session.</p>
+                  <p className="web-try-page__lede">
+                    Used only for this try. Deleted when you close, or within an hour.
+                  </p>
                 </>
               )}
 
@@ -465,12 +506,12 @@ export function WebTryExperience({
 
               {phase === "error" && (
                 <>
-                  <p className="web-try-page__eyebrow">{limitExhausted ? "Demo limit reached" : "Something went wrong"}</p>
-                  <h2>{limitExhausted ? "Join the waitlist for more" : "Could not analyze that screen"}</h2>
+                  <p className="web-try-page__eyebrow">{ERROR_EYEBROW[errorVariant]}</p>
+                  <h2>{ERROR_HEADING[errorVariant]}</h2>
                   <p className="web-try-page__lede">
                     {errorMessage ?? "Try again with a clearer photo."}
                   </p>
-                  {limitExhausted ? (
+                  {errorVariant !== "generic" ? (
                     <button className="hero-cta" type="button" onClick={onJoinWaitlist ?? onClose}>
                       Join the waitlist
                     </button>
@@ -617,14 +658,14 @@ export function WebTryExperience({
               ref={fileInputRef}
               className="sr-only"
               type="file"
-              accept="image/*"
+              accept={ACCEPT_ATTRIBUTE}
               onChange={(event) => void handleFileChange(event)}
             />
             <input
               ref={cameraInputRef}
               className="sr-only"
               type="file"
-              accept="image/*"
+              accept={ACCEPT_ATTRIBUTE}
               capture="environment"
               onChange={(event) => void handleFileChange(event)}
             />

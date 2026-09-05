@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import {
   TRY_LIMIT_REACHED,
   DAILY_CAPACITY_REACHED,
@@ -55,7 +56,12 @@ function jsonResponse(request: Request, body: unknown, status = 200): Response {
 
 // ── OPTIONS preflight ────────────────────────────────────
 
-for (const path of ["/web-try/quota", "/web-try/consume", "/web-try/upload-url"]) {
+for (const path of [
+  "/web-try/quota",
+  "/web-try/consume",
+  "/web-try/upload-url",
+  "/web-try/discard",
+]) {
   http.route({
     path,
     method: "OPTIONS",
@@ -75,7 +81,7 @@ http.route({
     const browserId = url.searchParams.get("browserId") ?? "";
 
     if (!browserId) {
-      return jsonResponse(request, { limit: 5, used: 0, remaining: 5, reason: null });
+      return jsonResponse(request, { error: "browserId is required" }, 400);
     }
 
     const quota = await ctx.runQuery(internal.tryQuota.getQuota, { browserId });
@@ -153,6 +159,35 @@ http.route({
 
     const uploadUrl = await ctx.storage.generateUploadUrl();
     return jsonResponse(request, { uploadUrl });
+  }),
+});
+
+// ── POST /web-try/discard { storageId, browserId } ───────
+
+http.route({
+  path: "/web-try/discard",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    let storageId = "";
+    let browserId = "";
+    try {
+      const body = (await request.json()) as { storageId?: string; browserId?: string };
+      storageId = body.storageId ?? "";
+      browserId = body.browserId ?? "";
+    } catch {
+      // empty body
+    }
+
+    // Always 204, even for a missing or unowned session, so this cannot be used
+    // to probe for valid storage ids.
+    if (storageId && browserId) {
+      await ctx.runMutation(internal.tryQuota.discardSession, {
+        storageId: storageId as Id<"_storage">,
+        browserId,
+      });
+    }
+
+    return new Response(null, { status: 204, headers: corsHeaders(request) });
   }),
 });
 

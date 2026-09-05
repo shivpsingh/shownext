@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { TRY_NONCE_INVALID } from "./tryQuota";
 import { prepareImageForAnalysis } from "./imagePrep";
+import { isUnsafeGoal, sensitiveActionResult } from "../lib/sensitiveAction";
 
 const PROMPT = `
 You are ShowNext, a visual action assistant.
@@ -910,6 +911,13 @@ export const analyzeScreen = action({
 
     console.log(`[analyze:${sessionId}] START storageId=${args.storageId} hasNonce=${!!args.nonce} hasClarification=${!!args.clarification} captureType=${args.captureType ?? "unknown"} useGrid=${useGrid}`);
 
+    // Deterministic refusal, matching the Android decision engine. Runs before
+    // any model call so a sensitive goal never reaches the vision API.
+    if (isUnsafeGoal(args.clarification)) {
+      console.log(`[analyze:${sessionId}] REFUSED unsafe goal`);
+      return sensitiveActionResult();
+    }
+
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       throw new Error("OPENAI_API_KEY is not configured on the Convex deployment.");
@@ -955,7 +963,10 @@ export const analyzeScreen = action({
     if (args.viewportHeight) imageContext.viewportHeight = args.viewportHeight;
 
     contextText += `\n\nIMAGE CONTEXT:\n${JSON.stringify(imageContext)}`;
-    console.log(`[analyze:${sessionId}] context="${contextText.slice(0, 200)}"`);
+    // Log shape only. The visitor's typed goal is session content we promise not to keep.
+    console.log(
+      `[analyze:${sessionId}] context chars=${contextText.length} ${JSON.stringify(imageContext)}`,
+    );
 
     const imageContent: Array<{ type: string; text?: string; image_url?: { url: string; detail: string } }> = [
       { type: "text", text: `${PROMPT}\n\nContext: ${contextText}` },
@@ -1010,13 +1021,20 @@ export const analyzeScreen = action({
       throw new Error("OpenAI returned an empty response.");
     }
 
-    console.log(`[analyze:${sessionId}] RAW RESPONSE:\n${content}`);
+    console.log(`[analyze:${sessionId}] response chars=${content.length}`);
 
     const cleaned = content.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(cleaned);
     const result = parseAnalysis(parsed, sessionId);
 
-    console.log(`[analyze:${sessionId}] PARSED label="${result.label}" instruction="${result.instruction.slice(0, 100)}" box=${result.box ? JSON.stringify(result.box) : "null"} confidence=${result.confidence} clarify=${result.needsClarification} warning=${result.warning ?? "none"}`);
+    // Post-filter, mirroring MainActivity.safeWarning on Android: never hand back
+    // a tap target for a sensitive action even if the model proposed one.
+    if (isUnsafeGoal(result.instruction) || isUnsafeGoal(result.label)) {
+      console.log(`[analyze:${sessionId}] REFUSED unsafe instruction`);
+      return { ...sensitiveActionResult(), screenSummary: result.screenSummary };
+    }
+
+    console.log(`[analyze:${sessionId}] PARSED hasLabel=${!!result.label} hasInstruction=${!!result.instruction} box=${result.box ? "yes" : "null"} confidence=${result.confidence} clarify=${result.needsClarification} warning=${result.warning ? "yes" : "none"}`);
     console.log(`[analyze:${sessionId}] DONE total=${Date.now() - t0}ms`);
 
     return result;

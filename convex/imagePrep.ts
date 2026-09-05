@@ -6,6 +6,9 @@ const MAX_LONG_EDGE = 2048;
 const MAX_SHORT_EDGE = 1024;
 const JPEG_QUALITY = 85;
 
+const ALLOWED_FORMATS = new Set(["jpeg", "jpg", "png", "webp"]);
+const MAX_INPUT_PIXELS = 25_000_000;
+
 const GRID_COLS = 6;
 const GRID_ROWS = 10;
 const ROW_LETTERS = "ABCDEFGHIJ";
@@ -30,9 +33,13 @@ export async function prepareImageForAnalysis(
 ): Promise<PreparedImage> {
   const useGrid = opts.useGrid ?? false;
 
-  let pipeline = sharp(imageBuffer).rotate(); // auto-orient via EXIF
+  let pipeline = sharp(imageBuffer, { limitInputPixels: MAX_INPUT_PIXELS }).rotate(); // auto-orient via EXIF
 
   const meta = await pipeline.metadata();
+  if (!meta.format || !ALLOWED_FORMATS.has(meta.format)) {
+    throw new Error("Unsupported image format. Use a JPEG, PNG, or WebP screenshot.");
+  }
+
   let w = meta.width ?? 1024;
   let h = meta.height ?? 1024;
 

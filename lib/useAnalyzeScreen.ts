@@ -4,21 +4,10 @@ import { useAction } from "convex/react";
 import { useCallback } from "react";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
+import { getBrowserId } from "./browserId";
 import { getConvexSiteUrl } from "./convexSite";
 import { TRY_LIMIT_REACHED } from "./useWebTryQuota";
 import { MAX_CLARIFICATION_ROUNDS, type ScreenAnalysis } from "../lib/webTry";
-
-const STORAGE_KEY = "shownext_browser_id";
-
-function getBrowserId(): string {
-  if (typeof window === "undefined") return "";
-  let id = localStorage.getItem(STORAGE_KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(STORAGE_KEY, id);
-  }
-  return id;
-}
 
 async function fetchSiteEndpoint<T>(
   path: string,
@@ -87,6 +76,24 @@ export function useAnalyzeScreen() {
     [analyzeScreen],
   );
 
+  const discardUpload = useCallback(async (storageId: Id<"_storage">) => {
+    const siteUrl = getConvexSiteUrl();
+    if (!siteUrl) return;
+    const browserId = getBrowserId();
+    if (!browserId) return;
+
+    try {
+      await fetch(`${siteUrl}/web-try/discard`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storageId, browserId }),
+        keepalive: true,
+      });
+    } catch {
+      // Best effort — the hourly sweep is the backstop.
+    }
+  }, []);
+
   const analyzeExisting = useCallback(
     async (storageId: Id<"_storage">, clarification: string) => {
       const analysis = (await analyzeScreen({ storageId, clarification })) as ScreenAnalysis;
@@ -95,5 +102,10 @@ export function useAnalyzeScreen() {
     [analyzeScreen],
   );
 
-  return { uploadAndAnalyze, analyzeExisting, maxClarificationRounds: MAX_CLARIFICATION_ROUNDS };
+  return {
+    uploadAndAnalyze,
+    analyzeExisting,
+    discardUpload,
+    maxClarificationRounds: MAX_CLARIFICATION_ROUNDS,
+  };
 }
