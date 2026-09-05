@@ -435,11 +435,13 @@ export function WebTryExperience({
           >
             <div className="web-try-result__card-slot">
               <AIActionCard analysis={analysis} />
-              {showFeedback ? (
-                <StepFeedback submitted={feedbackSubmitted} onSubmit={onFeedbackSubmit} />
-              ) : null}
             </div>
             <ResultScreenshot previewUrl={previewUrl} analysis={analysis} />
+            {showFeedback ? (
+              <div className="web-try-result__feedback-slot">
+                <StepFeedback submitted={feedbackSubmitted} onSubmit={onFeedbackSubmit} />
+              </div>
+            ) : null}
           </motion.div>
         ) : panelView ? (
           <>
